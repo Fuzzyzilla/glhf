@@ -204,6 +204,10 @@ struct Window {
     index_buffer: gl::types::GLuint,
     num_indices: gl::types::GLsizei,
     vbo: gl::types::GLuint,
+
+    shadow_program: gl::types::GLuint,
+    shadow_texture: gl::types::GLuint,
+    shadow_framebuffer: gl::types::GLuint,
 }
 impl Window {
     fn new(event_loop: &winit::event_loop::ActiveEventLoop) -> Self {
@@ -289,41 +293,78 @@ impl Window {
                 precision highp float;
 
                 layout(location = 0) uniform mat4 viewproj;
-                layout(location = 4) uniform vec3 sun_dir;
+                layout(location = 4) uniform mat4 shadow_viewproj;
 
                 layout(location = 0) in vec3 pos;
                 layout(location = 1) in vec3 normal;
 
-                layout(location = 0) out vec3 out_pos;
-                layout(location = 1) out vec3 out_normal;
-                layout(location = 2) out float sun;
+                layout(location = 0) out vec3 shadow_pos_ndc;
+                layout(location = 1) out float sun;
 
                 void main() {
-                    out_pos = pos;
-                    out_normal = normal;
-                    sun = -dot(sun_dir, normal);
+                    vec3 sun_dir = normalize((inverse(shadow_viewproj) * vec4(0.0, 0.0, 1.0, 1.0)).xyz);
+                    sun = max(-dot(sun_dir, normal) * 0.7 + 0.3, 0.0);
+
+                    vec4 shadow_pos = shadow_viewproj * vec4(pos, 1.0);
+                    shadow_pos_ndc = shadow_pos.xyz / shadow_pos.w;
+
                     gl_Position = viewproj * vec4(pos, 1.0);
                 }",
                 Some(
                     r"#version 310 es
                     precision highp float;
+                    layout(location = 8) uniform highp sampler2DShadow shadow;
 
-                    layout(location = 0) in vec3 pos;
-                    layout(location = 1) in vec3 normal;
-                    layout(location = 2) in float sun;
+                    layout(location = 0) in vec3 shadow_pos_ndc;
+                    layout(location = 1) in float sun;
 
                     layout(location = 0) out vec4 color;
 
                     void main() {
-                        color = sun * vec4(sin(gl_FragCoord.x / 10.0) / 2.0 + 0.5, sin(gl_FragCoord.x / 10.0 + 3.0) / 2.0 + 0.5,sin(gl_FragCoord.x / 10.0 + 5.0) / 2.0 + 0.5, 1.0);
+                        const float AMBIENT = 0.1;
+                        // Note to future self, this don't work if shadow is non orthographic.
+                        vec3 shadow_uvz = shadow_pos_ndc * 0.5 + 0.5;
+                        float depth = texture(shadow, shadow_uvz);
+
+                        float total_light = ((depth * 0.8 + 0.2) * sun) *(1.0 - AMBIENT) + AMBIENT;
+
+                        ivec2 funnier_uv = ivec2(shadow_pos_ndc.xy * 20.0);
+                        vec3 albedo = (funnier_uv.x + funnier_uv.y) % 2 == 0 ? vec3(1.0): vec3(0.8, 0.4, 0.9);
+
+                        color = total_light * vec4(albedo, 1.0);
                     }",
                 ),
             )
         }
         .unwrap();
 
-        unsafe {
-            gl::UseProgram(program);
+        let shadow_program = unsafe {
+            Self::compile(
+                r"#version 310 es
+                precision highp float;
+
+                layout(location = 0) uniform mat4 viewproj;
+
+                layout(location = 0) in vec3 pos;
+
+                void main() {
+                    gl_Position = viewproj * vec4(pos, 1.0);
+                }",
+                // Eh? Errors with "program lacks a fragment shader" if this is None, but
+                // fragment shaders are optional?!?
+                Some(
+                    r"#version 310 es
+                    void main() {}
+                    ",
+                ),
+            )
+        }
+        .unwrap();
+
+        let (shadow_texture, shadow_framebuffer) = unsafe { Self::make_shadow() }.unwrap();
+
+        // Camera at +,+ looking roughly towards origin.
+        let camera_matrix = {
             let proj = ultraviolet::projection::rh_yup::perspective_gl(
                 std::f32::consts::FRAC_PI_6,
                 1.0,
@@ -339,11 +380,41 @@ impl Window {
                 -std::f32::consts::FRAC_PI_4,
             );
 
-            let matrix = proj * (rotate * translate);
-            gl::UniformMatrix4fv(0, 1, gl::FALSE, matrix.as_ptr());
+            proj * (rotate * translate)
+        };
+        // Camera at light at 0,0 looking down.
+        // Lol, what a metal variable name.
+        let shadow_matrix = {
+            let proj =
+                ultraviolet::projection::rh_yup::orthographic_gl(-1.0, 1.0, -1.0, 1.0, 0.4, 1.2);
+            let translate = ultraviolet::Mat4::from_translation(Vec3::new(0.0, -1.0, 0.0));
+            let rotate = ultraviolet::Mat4::from_rotation_around(
+                ultraviolet::Vec4::unit_x(),
+                std::f32::consts::FRAC_PI_2,
+            );
 
-            let sun_dir = -ultraviolet::Vec3::new(1.0, 1.0, -1.0).normalized();
-            gl::Uniform3fv(4, 1, sun_dir.as_ptr());
+            let funnier_rotate = ultraviolet::Mat4::from_rotation_around(
+                ultraviolet::Vec4::new(0.5, 0.0, 1.0, 0.0).normalized(),
+                std::f32::consts::FRAC_PI_6 + 0.2,
+            );
+
+            proj * funnier_rotate * (rotate * translate)
+        };
+
+        unsafe {
+            gl::UseProgram(program);
+            Self::err();
+            gl::UniformMatrix4fv(0, 1, gl::FALSE, camera_matrix.as_ptr());
+            Self::err();
+            gl::UniformMatrix4fv(4, 1, gl::FALSE, shadow_matrix.as_ptr());
+            Self::err();
+            gl::Uniform1i(8, 0);
+            Self::err();
+
+            gl::UseProgram(shadow_program);
+            Self::err();
+            gl::UniformMatrix4fv(0, 1, gl::FALSE, shadow_matrix.as_ptr());
+            Self::err();
         }
 
         let (vertices, indices) =
@@ -364,6 +435,54 @@ impl Window {
             index_buffer: indices,
             vertex_buffer: vertices,
             vbo,
+
+            shadow_texture,
+            shadow_framebuffer,
+            shadow_program,
+        }
+    }
+    /// Make a (depth texture, fbo)
+    unsafe fn make_shadow() -> anyhow::Result<(gl::types::GLuint, gl::types::GLuint)> {
+        let mut texture = 0;
+        gl::GenTextures(1, std::ptr::addr_of_mut!(texture));
+        let mut fbo = 0;
+        gl::GenFramebuffers(1, std::ptr::addr_of_mut!(fbo));
+
+        gl::BindTexture(gl::TEXTURE_2D, texture);
+        gl::TexStorage2D(gl::TEXTURE_2D, 1, gl::DEPTH_COMPONENT16, 512, 512);
+        // Enable <= texture comparison
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_COMPARE_MODE,
+            gl::COMPARE_REF_TO_TEXTURE as _,
+        );
+        Self::err();
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_COMPARE_FUNC, gl::LEQUAL as _);
+        Self::err();
+        // Disable PCF
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);
+        Self::err();
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
+        Self::err();
+
+        gl::BindFramebuffer(gl::FRAMEBUFFER, fbo);
+        Self::err();
+        // Nothing to draw.
+        gl::DrawBuffers(0, std::ptr::null());
+        Self::err();
+        gl::ReadBuffer(gl::NONE);
+        Self::err();
+        gl::FramebufferTexture2D(
+            gl::FRAMEBUFFER,
+            gl::DEPTH_ATTACHMENT,
+            gl::TEXTURE_2D,
+            texture,
+            0,
+        );
+        Self::err();
+        match gl::CheckFramebufferStatus(gl::FRAMEBUFFER) {
+            gl::FRAMEBUFFER_COMPLETE => Ok((texture, fbo)),
+            x => anyhow::bail!("bad fbo: 0x{x:x}"),
         }
     }
     unsafe fn upload(
@@ -523,34 +642,70 @@ impl Window {
     }
     fn err() {
         let err = unsafe { gl::GetError() };
-        match err {
-            gl::NO_ERROR => (),
-            gl::INVALID_ENUM => println!("invalid enum"),
-            gl::INVALID_VALUE => println!("invalid value"),
-            gl::INVALID_OPERATION => println!("invalid operation"),
-            _ => println!("unknown error {err:x}"),
+        let string: Option<std::borrow::Cow<str>> = match err {
+            gl::NO_ERROR => None,
+            gl::INVALID_ENUM => Some("invalid enum".into()),
+            gl::INVALID_VALUE => Some("invalid value".into()),
+            gl::INVALID_OPERATION => Some("invalid operation".into()),
+            _ => Some(format!("unknown error: 0x{err:x}").into()),
+        };
+
+        if let Some(string) = string {
+            println!("gl err: {string}\n{}", std::backtrace::Backtrace::capture());
         }
     }
     fn redraw(&mut self) {
         unsafe {
+            Self::err();
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.shadow_framebuffer);
+            gl::Enable(gl::CULL_FACE);
+            gl::CullFace(gl::FRONT);
+            Self::err();
+            gl::UseProgram(self.shadow_program);
+            Self::err();
             gl::Enable(gl::DEPTH_TEST);
-            gl::UseProgram(self.program);
+            gl::DepthFunc(gl::LESS);
+            gl::Clear(gl::DEPTH_BUFFER_BIT);
+
             Self::err();
-            gl::ClearColor(0.0, 0.5, 0.8, 1.0);
-            Self::err();
-            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            gl::BindVertexArray(self.vbo);
             Self::err();
             gl::BindBuffer(gl::ARRAY_BUFFER, self.vertex_buffer);
+            Self::err();
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.index_buffer);
+            Self::err();
             gl::EnableVertexAttribArray(0);
+            Self::err();
             gl::EnableVertexAttribArray(1);
-
+            Self::err();
             gl::DrawElements(
                 gl::TRIANGLES,
                 self.num_indices,
                 gl::UNSIGNED_SHORT,
                 std::ptr::null(),
             );
+            Self::err();
+
+            gl::CullFace(gl::BACK);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            Self::err();
+            gl::UseProgram(self.program);
+            Self::err();
+            gl::ClearColor(0.0, 0.5, 0.8, 1.0);
+            Self::err();
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            Self::err();
+
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.shadow_texture);
+            Self::err();
+            gl::DrawElements(
+                gl::TRIANGLES,
+                self.num_indices,
+                gl::UNSIGNED_SHORT,
+                std::ptr::null(),
+            );
+
             Self::err();
         }
         self.window.pre_present_notify();
