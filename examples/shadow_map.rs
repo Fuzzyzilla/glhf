@@ -1,10 +1,11 @@
+use std::num::{NonZero, NonZeroU32};
+
+use glhf::ThinGLObject;
 use glutin::prelude::*;
 use ultraviolet::Vec3;
 
-pub mod gl {
-    #![allow(clippy::all)]
-    include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
-}
+use gl::types::{GLchar, GLenum, GLint, GLsizei, GLuint};
+use glhf::gl;
 
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
@@ -199,15 +200,15 @@ struct Window {
     context: glutin::context::PossiblyCurrentContext,
     window: winit::window::Window,
 
-    program: gl::types::GLuint,
-    vertex_buffer: gl::types::GLuint,
-    index_buffer: gl::types::GLuint,
-    num_indices: gl::types::GLsizei,
-    vbo: gl::types::GLuint,
+    program: GLuint,
+    vertex_buffer: GLuint,
+    index_buffer: GLuint,
+    num_indices: GLsizei,
+    vbo: GLuint,
 
-    shadow_program: gl::types::GLuint,
-    shadow_texture: gl::types::GLuint,
-    shadow_framebuffer: gl::types::GLuint,
+    shadow_program: GLuint,
+    shadow_texture: GLuint,
+    shadow_framebuffer: GLuint,
 }
 impl Window {
     fn new(event_loop: &winit::event_loop::ActiveEventLoop) -> Self {
@@ -331,7 +332,7 @@ impl Window {
                         ivec2 funnier_uv = ivec2(shadow_pos_ndc.xy * 20.0);
                         vec3 albedo = (funnier_uv.x + funnier_uv.y) % 2 == 0 ? vec3(1.0): vec3(0.8, 0.4, 0.9);
 
-                        color = total_light * vec4(albedo, 1.0);
+                        color = vec4(total_light * albedo, 1.0);
                     }",
                 ),
             )
@@ -361,7 +362,40 @@ impl Window {
         }
         .unwrap();
 
-        let (shadow_texture, shadow_framebuffer) = unsafe { Self::make_shadow() }.unwrap();
+        let mut gl = unsafe { glhf::GLHF::current() };
+
+        let [shadow] = gl.create.textures();
+        let [shadow_framebuffer] = gl.create.framebuffers();
+
+        let (shadow, texture_slot) = gl.texture.d2.initialize(shadow);
+        texture_slot
+            .storage(
+                1.try_into().unwrap(),
+                glhf::texture::InternalFormat::DepthComponent16,
+                512.try_into().unwrap(),
+                512.try_into().unwrap(),
+            )
+            // Enable `sampelr*Shadow` sampling
+            .compare_mode(Some(glhf::DepthCompareFunc::LessEqual))
+            // Enable PCF
+            .min_filter(glhf::texture::Filter::Linear, None)
+            .mag_filter(glhf::texture::Filter::Linear);
+
+        gl.framebuffer
+            .draw
+            .bind(&shadow_framebuffer)
+            .texture_2d(&shadow, glhf::framebuffer::Attachment::Depth, 0)
+            // No fragment outputs.
+            .draw_buffers(&[]);
+
+        let (shadow_framebuffer, _) = gl
+            .framebuffer
+            .draw
+            .try_complete(shadow_framebuffer)
+            .unwrap();
+
+        let shadow_texture = shadow.into_name().get();
+        let shadow_framebuffer = shadow_framebuffer.into_name().get();
 
         // Camera at +,+ looking roughly towards origin.
         let camera_matrix = {
@@ -442,7 +476,7 @@ impl Window {
         }
     }
     /// Make a (depth texture, fbo)
-    unsafe fn make_shadow() -> anyhow::Result<(gl::types::GLuint, gl::types::GLuint)> {
+    unsafe fn make_shadow() -> anyhow::Result<(GLuint, GLuint)> {
         let mut texture = 0;
         gl::GenTextures(1, std::ptr::addr_of_mut!(texture));
         let mut fbo = 0;
@@ -485,10 +519,7 @@ impl Window {
             x => anyhow::bail!("bad fbo: 0x{x:x}"),
         }
     }
-    unsafe fn upload(
-        vertices: &[Vertex],
-        indices: &[u16],
-    ) -> anyhow::Result<(gl::types::GLuint, gl::types::GLuint)> {
+    unsafe fn upload(vertices: &[Vertex], indices: &[u16]) -> anyhow::Result<(GLuint, GLuint)> {
         let mut buffers = [0; 2];
         gl::GenBuffers(2, buffers.as_mut_ptr());
 
@@ -513,7 +544,7 @@ impl Window {
 
         Ok((vertex_buffer, index_buffer))
     }
-    unsafe fn make_vertex_vbo() -> anyhow::Result<gl::types::GLuint> {
+    unsafe fn make_vertex_vbo() -> anyhow::Result<GLuint> {
         let mut array = 0;
         gl::GenVertexArrays(1, std::ptr::addr_of_mut!(array));
         gl::BindVertexArray(array);
@@ -534,52 +565,51 @@ impl Window {
 
         Ok(array)
     }
-    unsafe fn compile(vertex: &str, fragment: Option<&str>) -> anyhow::Result<gl::types::GLuint> {
+    unsafe fn compile(vertex: &str, fragment: Option<&str>) -> anyhow::Result<GLuint> {
         let program = gl::CreateProgram();
 
-        let compile_shader =
-            |ty: gl::types::GLenum, src: &str| -> anyhow::Result<gl::types::GLuint> {
-                let shader = gl::CreateShader(ty);
-                let sources = [src.as_ptr().cast::<gl::types::GLchar>()];
-                let lengths = [gl::types::GLint::try_from(src.len())?];
-                // Sources *may* have nul-bytes, as they are UTF8 - I couldn't find any verbage that says this *isn't* allowed ;3
-                gl::ShaderSource(shader, 1, sources.as_ptr(), lengths.as_ptr());
+        let compile_shader = |ty: gl::types::GLenum, src: &str| -> anyhow::Result<GLuint> {
+            let shader = gl::CreateShader(ty);
+            let sources = [src.as_ptr().cast::<GLchar>()];
+            let lengths = [GLint::try_from(src.len())?];
+            // Sources *may* have nul-bytes, as they are UTF8 - I couldn't find any verbage that says this *isn't* allowed ;3
+            gl::ShaderSource(shader, 1, sources.as_ptr(), lengths.as_ptr());
+            Self::err();
+            gl::CompileShader(shader);
+            Self::err();
+            let mut was_successful = gl::FALSE.into();
+            gl::GetShaderiv(
+                shader,
+                gl::COMPILE_STATUS,
+                std::ptr::addr_of_mut!(was_successful),
+            );
+            Self::err();
+            if was_successful == gl::FALSE.into() {
+                let mut length = 0;
+                gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, std::ptr::addr_of_mut!(length));
                 Self::err();
-                gl::CompileShader(shader);
-                Self::err();
-                let mut was_successful = gl::FALSE.into();
-                gl::GetShaderiv(
+                let mut string_bytes = vec![0; length.try_into().unwrap()];
+                gl::GetShaderInfoLog(
                     shader,
-                    gl::COMPILE_STATUS,
-                    std::ptr::addr_of_mut!(was_successful),
+                    string_bytes.len().try_into().unwrap(),
+                    std::ptr::null_mut(),
+                    string_bytes.as_mut_ptr(),
                 );
                 Self::err();
-                if was_successful == gl::FALSE.into() {
-                    let mut length = 0;
-                    gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, std::ptr::addr_of_mut!(length));
-                    Self::err();
-                    let mut string_bytes = vec![0; length.try_into().unwrap()];
-                    gl::GetShaderInfoLog(
-                        shader,
-                        string_bytes.len().try_into().unwrap(),
-                        std::ptr::null_mut(),
-                        string_bytes.as_mut_ptr(),
-                    );
-                    Self::err();
-                    // i8 -> u8 reinterpret.
-                    let (ptr, len, cap) = (
-                        string_bytes.as_mut_ptr(),
-                        string_bytes.len(),
-                        string_bytes.capacity(),
-                    );
-                    std::mem::forget(string_bytes);
-                    let string_bytes = Vec::from_raw_parts(ptr.cast::<u8>(), len, cap);
+                // i8 -> u8 reinterpret.
+                let (ptr, len, cap) = (
+                    string_bytes.as_mut_ptr(),
+                    string_bytes.len(),
+                    string_bytes.capacity(),
+                );
+                std::mem::forget(string_bytes);
+                let string_bytes = Vec::from_raw_parts(ptr.cast::<u8>(), len, cap);
 
-                    let cstr = std::ffi::CString::from_vec_with_nul(string_bytes).unwrap();
-                    anyhow::bail!("shader failed to compile:\n{cstr:?}");
-                }
-                Ok(shader)
-            };
+                let cstr = std::ffi::CString::from_vec_with_nul(string_bytes).unwrap();
+                anyhow::bail!("shader failed to compile:\n{cstr:?}");
+            }
+            Ok(shader)
+        };
 
         let vertex = compile_shader(gl::VERTEX_SHADER, vertex)?;
         gl::AttachShader(program, vertex);
@@ -710,32 +740,6 @@ impl Window {
         }
         self.window.pre_present_notify();
         self.surface.swap_buffers(&self.context).unwrap();
-    }
-}
-
-pub struct Texture2D(gl::types::GLuint);
-pub struct Texture2DBuilder {}
-pub struct ActiveTexture2D<'slot> {
-    _slot: &'slot Texture2DSlot,
-}
-pub struct Texture2DSlot {}
-impl Texture2DSlot {
-    /// Globally bind texture, returning an active token.
-    pub fn bind(&mut self, texture: &Texture2D) -> ActiveTexture2D {
-        unsafe { gl::BindTexture(gl::TEXTURE_2D, texture.0) };
-        self.get()
-    }
-    /// Get the globally bound texture.
-    pub fn get(&self) -> ActiveTexture2D {
-        ActiveTexture2D { _slot: self }
-    }
-}
-pub struct Gl {
-    pub texture_2d: Texture2DSlot,
-}
-impl Gl {
-    pub fn texture() {
-        todo!()
     }
 }
 
