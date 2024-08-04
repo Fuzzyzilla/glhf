@@ -21,6 +21,7 @@ pub mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
+pub mod buffer;
 pub mod framebuffer;
 pub mod slot;
 pub mod texture;
@@ -59,13 +60,19 @@ impl Create {
     pub fn textures<const N: usize>(&self) -> [texture::Stateless; N] {
         unsafe { gl_gen_with(gl::GenTextures) }
     }
+    /// Delete stateless textures. To delete stateful textures, use the relevant [`slot::texture`] interface.
+    pub fn delete_textures<const N: usize>(&self, textures: [texture::Stateless; N]) {
+        unsafe { gl_delete_with(gl::DeleteTextures, textures) }
+    }
     /// Generate a set of new framebuffer objects.
     pub fn framebuffers<const N: usize>(&self) -> [framebuffer::Incomplete; N] {
         unsafe { gl_gen_with(gl::GenFramebuffers) }
     }
-    /// Delete stateless textures. To delete stateful textures, use the relevant [`slot::texture`] interface.
-    pub fn delete_textures<const N: usize>(&self, textures: [texture::Stateless; N]) {
-        unsafe { gl_delete_with(gl::DeleteTextures, textures) }
+    /// Generate a set of new buffer objects.
+    // Interestingly, glGenBuffers is *optional* - you can just make up a number
+    // and use it. We intentionally don't support this usecase.
+    pub fn buffers<const N: usize>(&self) -> [buffer::Buffer; N] {
+        unsafe { gl_gen_with(gl::GenBuffers) }
     }
 }
 
@@ -77,6 +84,8 @@ pub struct GLHF {
     pub texture: slot::texture::Slots,
     /// Bindings for `{DRAW, READ}_FRAMEBUFFER`.
     pub framebuffer: slot::framebuffer::Slots,
+    /// Bindings for `*_BUFFER`
+    pub buffer: slot::buffer::Slots,
     /// Generate new objects.
     pub create: Create,
     _cant_destructure: (),
@@ -96,7 +105,7 @@ impl GLHF {
     /// * If multiple `Self` objects exist, it is invalid to use objects derived from one's context
     ///   in methods on another one's context.
     pub unsafe fn current() -> Self {
-        use slot::{framebuffer, texture};
+        use slot::{buffer, framebuffer, texture};
         use std::marker::PhantomData;
 
         Self {
@@ -109,6 +118,16 @@ impl GLHF {
             framebuffer: framebuffer::Slots {
                 draw: framebuffer::Slot(PhantomData, PhantomData),
                 read: framebuffer::Slot(PhantomData, PhantomData),
+            },
+            buffer: buffer::Slots {
+                array: buffer::Slot(PhantomData, PhantomData),
+                copy_read: buffer::Slot(PhantomData, PhantomData),
+                copy_write: buffer::Slot(PhantomData, PhantomData),
+                element_array: buffer::Slot(PhantomData, PhantomData),
+                pixel_pack: buffer::Slot(PhantomData, PhantomData),
+                pixel_unpack: buffer::Slot(PhantomData, PhantomData),
+                transform_feedback: buffer::Slot(PhantomData, PhantomData),
+                uniform: buffer::Slot(PhantomData, PhantomData),
             },
             create: Create(PhantomData),
             _cant_destructure: (),

@@ -388,6 +388,7 @@ name = "glhf"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bitflags 2.6.0",
  "bytemuck",
  "gl_generator",
  "glutin",

@@ -454,8 +454,20 @@ impl Window {
         let (vertices, indices) =
             load_obj(std::io::Cursor::new(include_bytes!("../test.obj"))).unwrap();
 
+        let [vertex_buffer, index_buffer] = gl.create.buffers();
+
+        gl.buffer.array.bind(&vertex_buffer).data(
+            bytemuck::cast_slice(&vertices),
+            glhf::buffer::usage::Frequency::Static,
+            glhf::buffer::usage::Access::Draw,
+        );
+        gl.buffer.element_array.bind(&index_buffer).data(
+            bytemuck::cast_slice(&indices),
+            glhf::buffer::usage::Frequency::Static,
+            glhf::buffer::usage::Access::Draw,
+        );
+
         let num_indices = indices.len().try_into().unwrap();
-        let (vertices, indices) = unsafe { Self::upload(&vertices, &indices) }.unwrap();
 
         let vbo = unsafe { Self::make_vertex_vbo().unwrap() };
 
@@ -466,83 +478,14 @@ impl Window {
             program,
 
             num_indices,
-            index_buffer: indices,
-            vertex_buffer: vertices,
+            index_buffer: index_buffer.into_name().get(),
+            vertex_buffer: vertex_buffer.into_name().get(),
             vbo,
 
             shadow_texture,
             shadow_framebuffer,
             shadow_program,
         }
-    }
-    /// Make a (depth texture, fbo)
-    unsafe fn make_shadow() -> anyhow::Result<(GLuint, GLuint)> {
-        let mut texture = 0;
-        gl::GenTextures(1, std::ptr::addr_of_mut!(texture));
-        let mut fbo = 0;
-        gl::GenFramebuffers(1, std::ptr::addr_of_mut!(fbo));
-
-        gl::BindTexture(gl::TEXTURE_2D, texture);
-        gl::TexStorage2D(gl::TEXTURE_2D, 1, gl::DEPTH_COMPONENT16, 512, 512);
-        // Enable <= texture comparison
-        gl::TexParameteri(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_COMPARE_MODE,
-            gl::COMPARE_REF_TO_TEXTURE as _,
-        );
-        Self::err();
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_COMPARE_FUNC, gl::LEQUAL as _);
-        Self::err();
-        // Disable PCF
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);
-        Self::err();
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
-        Self::err();
-
-        gl::BindFramebuffer(gl::FRAMEBUFFER, fbo);
-        Self::err();
-        // Nothing to draw.
-        gl::DrawBuffers(0, std::ptr::null());
-        Self::err();
-        gl::ReadBuffer(gl::NONE);
-        Self::err();
-        gl::FramebufferTexture2D(
-            gl::FRAMEBUFFER,
-            gl::DEPTH_ATTACHMENT,
-            gl::TEXTURE_2D,
-            texture,
-            0,
-        );
-        Self::err();
-        match gl::CheckFramebufferStatus(gl::FRAMEBUFFER) {
-            gl::FRAMEBUFFER_COMPLETE => Ok((texture, fbo)),
-            x => anyhow::bail!("bad fbo: 0x{x:x}"),
-        }
-    }
-    unsafe fn upload(vertices: &[Vertex], indices: &[u16]) -> anyhow::Result<(GLuint, GLuint)> {
-        let mut buffers = [0; 2];
-        gl::GenBuffers(2, buffers.as_mut_ptr());
-
-        let [vertex_buffer, index_buffer] = buffers;
-        gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer);
-        let vertices: &[u8] = bytemuck::cast_slice(vertices);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            vertices.len().try_into()?,
-            vertices.as_ptr().cast(),
-            gl::STATIC_DRAW,
-        );
-
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
-        let indices: &[u8] = bytemuck::cast_slice(indices);
-        gl::BufferData(
-            gl::ELEMENT_ARRAY_BUFFER,
-            indices.len().try_into()?,
-            indices.as_ptr().cast(),
-            gl::STATIC_DRAW,
-        );
-
-        Ok((vertex_buffer, index_buffer))
     }
     unsafe fn make_vertex_vbo() -> anyhow::Result<GLuint> {
         let mut array = 0;
