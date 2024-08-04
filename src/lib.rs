@@ -23,8 +23,10 @@ pub mod gl {
 
 pub mod buffer;
 pub mod framebuffer;
+pub mod program;
 pub mod slot;
 pub mod texture;
+pub mod vertex_array;
 
 #[repr(u32)]
 pub enum DepthCompareFunc {
@@ -54,6 +56,8 @@ unsafe impl crate::GLEnum for DepthCompareFunc {}
 /// let [one_texture] = gl.create.textures();
 /// let [a, bunch, of, framebuffers] = gl.create.framebuffers();
 /// ```
+// Interestingly, many `glGen*`s are *optional* - you can just make up a number
+// and use it. We intentionally don't support this usecase.
 pub struct Create(NotSync);
 impl Create {
     /// Generate a set of new texture objects.
@@ -68,11 +72,44 @@ impl Create {
     pub fn framebuffers<const N: usize>(&self) -> [framebuffer::Incomplete; N] {
         unsafe { gl_gen_with(gl::GenFramebuffers) }
     }
+    /// Generate a set of new framebuffer objects.
+    pub fn vertex_arrays<const N: usize>(&self) -> [vertex_array::VertexArray; N] {
+        unsafe { gl_gen_with(gl::GenVertexArrays) }
+    }
     /// Generate a set of new buffer objects.
-    // Interestingly, glGenBuffers is *optional* - you can just make up a number
-    // and use it. We intentionally don't support this usecase.
     pub fn buffers<const N: usize>(&self) -> [buffer::Buffer; N] {
         unsafe { gl_gen_with(gl::GenBuffers) }
+    }
+    /// Initialize a shader object of the given type.
+    pub fn shader<Ty: program::Type>(&self) -> program::EmptyShader<Ty> {
+        let value = unsafe { gl::CreateShader(Ty::TYPE) };
+        let name: NonZeroName = value
+            .try_into()
+            .expect("internal gl error while creating shader");
+
+        // Safety: Precondition of ThinGLOject.
+        unsafe { std::mem::transmute(name) }
+    }
+    /// Initialize a program object.
+    pub fn program(&self) -> program::Program {
+        let value = unsafe { gl::CreateProgram() };
+        let name: NonZeroName = value
+            .try_into()
+            .expect("internal gl error while creating program");
+
+        // Safety: Precondition of ThinGLOject.
+        unsafe { std::mem::transmute(name) }
+    }
+}
+
+pub struct Hint(NotSync);
+impl Hint {
+    /// Hint to the GL that you won't be compiling more shaders or programs.
+    ///
+    /// It is still valid to issue compilation and linking calls after this,
+    /// but there may be a significant performance penalty.
+    pub fn release_compiler(&self) {
+        unsafe { gl::ReleaseShaderCompiler() }
     }
 }
 
@@ -80,14 +117,19 @@ impl Create {
 // That's not what we're doing, clippy!
 #[allow(clippy::manual_non_exhaustive)]
 pub struct GLHF {
-    /// Bindings for `TEXTURE_{2D, 2D_ARRAY, 3D, CUBE_MAP}`
+    /// `glBindTexture`
     pub texture: slot::texture::Slots,
-    /// Bindings for `{DRAW, READ}_FRAMEBUFFER`.
+    /// `glBindFramebuffer`
     pub framebuffer: slot::framebuffer::Slots,
-    /// Bindings for `*_BUFFER`
+    /// `glBindBuffer`
     pub buffer: slot::buffer::Slots,
-    /// Generate new objects.
+    /// `glBindVertexArray`
+    pub vertex_array: slot::vertex_array::Slot,
+    /// `glGen*`
     pub create: Create,
+    /// `glUseProgram`
+    pub program: slot::program::Slot,
+    pub hint: Hint,
     _cant_destructure: (),
 }
 impl GLHF {
@@ -105,9 +147,10 @@ impl GLHF {
     /// * If multiple `Self` objects exist, it is invalid to use objects derived from one's context
     ///   in methods on another one's context.
     pub unsafe fn current() -> Self {
-        use slot::{buffer, framebuffer, texture};
+        use slot::{buffer, framebuffer, program, texture, vertex_array};
         use std::marker::PhantomData;
 
+        // I find it really funny that all this code is constructing a ZST, and is thus a no-op, Lol
         Self {
             texture: texture::Slots {
                 d2: texture::Slot::<crate::texture::D2>(PhantomData, PhantomData),
@@ -129,7 +172,10 @@ impl GLHF {
                 transform_feedback: buffer::Slot(PhantomData, PhantomData),
                 uniform: buffer::Slot(PhantomData, PhantomData),
             },
+            vertex_array: vertex_array::Slot(PhantomData),
             create: Create(PhantomData),
+            program: program::Slot(PhantomData),
+            hint: Hint(PhantomData),
             _cant_destructure: (),
         }
     }

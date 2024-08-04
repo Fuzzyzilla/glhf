@@ -63,6 +63,10 @@ unsafe impl MapAccess for ReadWrite {
     const FLAGS: gl::types::GLbitfield = gl::MAP_READ_BIT | gl::MAP_WRITE_BIT;
 }
 
+// TODO: Write only. It is substantially faster than `ReadWrite` if you don't need to read,
+// but it is hard to wrap safely - Rust's type system assumes writable implies readable, so
+// i'd instead need a bespoke opaque interface for a blackhole of bytes.
+
 pub struct BufferMapGuard<'active, 'slot: 'active, T: Target, Access: MapAccess> {
     // We hold it the slot and buffer mutably, as it is an error to use the buffer for any operation
     // until it is unmapped. Holding it this way also ensures that Self::drop has safe access

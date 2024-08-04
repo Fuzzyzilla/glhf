@@ -1,6 +1,6 @@
 use std::num::{NonZero, NonZeroU32};
 
-use glhf::ThinGLObject;
+use glhf::{vertex_array, ThinGLObject};
 use glutin::prelude::*;
 use ultraviolet::Vec3;
 
@@ -200,13 +200,13 @@ struct Window {
     context: glutin::context::PossiblyCurrentContext,
     window: winit::window::Window,
 
-    program: GLuint,
+    program: glhf::program::LinkedProgram,
     vertex_buffer: GLuint,
     index_buffer: GLuint,
     num_indices: GLsizei,
     vbo: GLuint,
 
-    shadow_program: GLuint,
+    shadow_program: glhf::program::LinkedProgram,
     shadow_texture: GLuint,
     shadow_framebuffer: GLuint,
 }
@@ -288,9 +288,14 @@ impl Window {
             println!("Workgroups: {workgroups:?}");
         }
 
-        let program = unsafe {
-            Self::compile(
-                r"#version 310 es
+        let mut gl = unsafe { glhf::GLHF::current() };
+        let program = {
+            let vertex = gl.create.shader::<glhf::program::Vertex>();
+            let vertex = gl
+                .program
+                .compile(
+                    vertex,
+                    r"#version 310 es
                 precision highp float;
 
                 layout(location = 0) uniform mat4 viewproj;
@@ -311,7 +316,13 @@ impl Window {
 
                     gl_Position = viewproj * vec4(pos, 1.0);
                 }",
-                Some(
+                )
+                .unwrap();
+            let fragment = gl.create.shader::<glhf::program::Fragment>();
+            let fragment = gl
+                .program
+                .compile(
+                    fragment,
                     r"#version 310 es
                     precision highp float;
                     layout(location = 8) uniform highp sampler2DShadow shadow;
@@ -334,14 +345,34 @@ impl Window {
 
                         color = vec4(total_light * albedo, 1.0);
                     }",
-                ),
-            )
-        }
-        .unwrap();
+                )
+                .unwrap();
 
-        let shadow_program = unsafe {
-            Self::compile(
-                r"#version 310 es
+            let program = gl.create.program();
+            let program = gl
+                .program
+                .link(
+                    program,
+                    glhf::program::ProgramShaders::Graphics {
+                        vertex: &vertex,
+                        fragment: &fragment,
+                    },
+                )
+                .unwrap();
+
+            gl.program.delete_shader(vertex.into());
+            gl.program.delete_shader(fragment.into());
+
+            program
+        };
+
+        let shadow_program = {
+            let vertex = gl.create.shader::<glhf::program::Vertex>();
+            let vertex = gl
+                .program
+                .compile(
+                    vertex,
+                    r"#version 310 es
                 precision highp float;
 
                 layout(location = 0) uniform mat4 viewproj;
@@ -351,18 +382,39 @@ impl Window {
                 void main() {
                     gl_Position = viewproj * vec4(pos, 1.0);
                 }",
-                // Eh? Errors with "program lacks a fragment shader" if this is None, but
-                // fragment shaders are optional?!?
-                Some(
+                )
+                .unwrap();
+            let fragment = gl.create.shader::<glhf::program::Fragment>();
+            let fragment = gl
+                .program
+                .compile(
+                    fragment,
                     r"#version 310 es
                     void main() {}
                     ",
-                ),
-            )
-        }
-        .unwrap();
+                )
+                .unwrap();
 
-        let mut gl = unsafe { glhf::GLHF::current() };
+            let program = gl.create.program();
+            let program = gl
+                .program
+                .link(
+                    program,
+                    glhf::program::ProgramShaders::Graphics {
+                        vertex: &vertex,
+                        fragment: &fragment,
+                    },
+                )
+                .unwrap();
+
+            gl.program.delete_shader(vertex.into());
+            gl.program.delete_shader(fragment.into());
+
+            program
+        };
+
+        // We've compiled all we need :3
+        gl.hint.release_compiler();
 
         let [shadow] = gl.create.textures();
         let [shadow_framebuffer] = gl.create.framebuffers();
@@ -435,21 +487,24 @@ impl Window {
             proj * funnier_rotate * (rotate * translate)
         };
 
-        unsafe {
-            gl::UseProgram(program);
-            Self::err();
-            gl::UniformMatrix4fv(0, 1, gl::FALSE, camera_matrix.as_ptr());
-            Self::err();
-            gl::UniformMatrix4fv(4, 1, gl::FALSE, shadow_matrix.as_ptr());
-            Self::err();
-            gl::Uniform1i(8, 0);
-            Self::err();
+        // Convert ultraviolet matrices into GL matrices.
+        let camera_matrix = glhf::program::uniform::Mat4::from(
+            camera_matrix.as_component_array().map(|v| *v.as_array()),
+        );
+        let shadow_matrix = glhf::program::uniform::Mat4::from(
+            shadow_matrix.as_component_array().map(|v| *v.as_array()),
+        );
 
-            gl::UseProgram(shadow_program);
-            Self::err();
-            gl::UniformMatrix4fv(0, 1, gl::FALSE, shadow_matrix.as_ptr());
-            Self::err();
-        }
+        gl.program
+            .bind(&program)
+            .uniform_matrix(0, &camera_matrix)
+            .uniform_matrix(4, &shadow_matrix)
+            // Bind texture unit 0
+            .uniform(8, &0u32);
+
+        gl.program
+            .bind(&shadow_program)
+            .uniform_matrix(0, &shadow_matrix);
 
         let (vertices, indices) =
             load_obj(std::io::Cursor::new(include_bytes!("../test.obj"))).unwrap();
@@ -469,7 +524,33 @@ impl Window {
 
         let num_indices = indices.len().try_into().unwrap();
 
-        let vbo = unsafe { Self::make_vertex_vbo().unwrap() };
+        let [vao] = gl.create.vertex_arrays();
+
+        let stride = std::mem::size_of::<Vertex>().try_into().unwrap();
+        gl.vertex_array
+            .bind(&vao)
+            .attribute(
+                0,
+                vertex_array::Attribute {
+                    ty: vertex_array::AttributeType::Float(vertex_array::FloatingAttribute::F32),
+                    components: vertex_array::Components::Vec3,
+                    stride: Some(stride),
+                    offset: std::mem::offset_of!(Vertex, pos),
+                },
+                // Eagerly enable
+                Some(true),
+            )
+            .attribute(
+                1,
+                vertex_array::Attribute {
+                    ty: vertex_array::AttributeType::Float(vertex_array::FloatingAttribute::F32),
+                    components: vertex_array::Components::Vec3,
+                    stride: Some(stride),
+                    offset: std::mem::offset_of!(Vertex, normal),
+                },
+                // Eagerly enable
+                Some(true),
+            );
 
         Self {
             context,
@@ -480,33 +561,12 @@ impl Window {
             num_indices,
             index_buffer: index_buffer.into_name().get(),
             vertex_buffer: vertex_buffer.into_name().get(),
-            vbo,
+            vbo: vao.into_name().get(),
 
             shadow_texture,
             shadow_framebuffer,
             shadow_program,
         }
-    }
-    unsafe fn make_vertex_vbo() -> anyhow::Result<GLuint> {
-        let mut array = 0;
-        gl::GenVertexArrays(1, std::ptr::addr_of_mut!(array));
-        gl::BindVertexArray(array);
-        let stride = std::mem::size_of::<Vertex>().try_into()?;
-        // Position
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, stride, std::ptr::null());
-        gl::EnableVertexAttribArray(0);
-        // Normal
-        gl::VertexAttribPointer(
-            1,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            stride,
-            std::mem::offset_of!(Vertex, normal) as _,
-        );
-        gl::EnableVertexAttribArray(1);
-
-        Ok(array)
     }
     unsafe fn compile(vertex: &str, fragment: Option<&str>) -> anyhow::Result<GLuint> {
         let program = gl::CreateProgram();
@@ -634,7 +694,7 @@ impl Window {
             gl::Enable(gl::CULL_FACE);
             gl::CullFace(gl::FRONT);
             Self::err();
-            gl::UseProgram(self.shadow_program);
+            gl::UseProgram(self.shadow_program.name().get());
             Self::err();
             gl::Enable(gl::DEPTH_TEST);
             gl::DepthFunc(gl::LESS);
@@ -662,7 +722,7 @@ impl Window {
             gl::CullFace(gl::BACK);
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
             Self::err();
-            gl::UseProgram(self.program);
+            gl::UseProgram(self.program.name().get());
             Self::err();
             gl::ClearColor(0.0, 0.5, 0.8, 1.0);
             Self::err();
