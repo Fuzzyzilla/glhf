@@ -152,6 +152,6 @@ pub struct Attribute {
 pub struct VertexArray(pub(crate) NonZeroName);
 
 impl crate::sealed::Sealed for VertexArray {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for VertexArray {}

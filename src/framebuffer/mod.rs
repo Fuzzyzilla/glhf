@@ -50,8 +50,8 @@ unsafe impl crate::GLEnum for DefaultBuffer {}
 #[derive(Debug)]
 pub struct Incomplete(pub(crate) NonZeroName);
 impl crate::sealed::Sealed for Incomplete {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for Incomplete {}
 
 /// A framebuffer that is known to be complete.
@@ -60,8 +60,8 @@ unsafe impl crate::ThinGLObject for Incomplete {}
 #[derive(Debug)]
 pub struct Complete(pub(crate) NonZeroName);
 impl crate::sealed::Sealed for Complete {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for Complete {}
 
 impl Incomplete {

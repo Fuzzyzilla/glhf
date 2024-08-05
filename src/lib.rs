@@ -22,6 +22,7 @@ pub mod gl {
 }
 
 pub mod buffer;
+pub mod draw;
 pub mod framebuffer;
 pub mod program;
 pub mod slot;
@@ -129,6 +130,7 @@ pub struct GLHF {
     pub create: Create,
     /// `glUseProgram`
     pub program: slot::program::Slot,
+    pub draw: draw::Draw,
     pub hint: Hint,
     _cant_destructure: (),
 }
@@ -176,6 +178,7 @@ impl GLHF {
             create: Create(PhantomData),
             program: program::Slot(PhantomData),
             hint: Hint(PhantomData),
+            draw: draw::Draw(PhantomData),
             _cant_destructure: (),
         }
     }
@@ -187,7 +190,7 @@ mod sealed {
 
 /// # Safety
 /// * A pointer to `self` must be safely writable and writable as `NonZero<GLuint>`.
-/// * A value of NonZero<GLuint> is a fully-initialized value of `self`.
+/// * A value of `NonZero<GLuint>` is a fully-initialized value of `self`.
 pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
     /// Fetch the "name" of the object, the unique ID used to interact with the GL.
     /// # Safety

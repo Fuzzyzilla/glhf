@@ -246,8 +246,8 @@ impl<Ty: Type> EmptyShader<Ty> {
 }
 
 impl<Ty: Type> crate::sealed::Sealed for EmptyShader<Ty> {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl<Ty: Type> crate::ThinGLObject for EmptyShader<Ty> {}
 
 /// A shader which has been successfully compiled.
@@ -257,8 +257,8 @@ unsafe impl<Ty: Type> crate::ThinGLObject for EmptyShader<Ty> {}
 pub struct CompiledShader<Ty: Type>(pub(crate) NonZeroName, std::marker::PhantomData<Ty>);
 
 impl<Ty: Type> crate::sealed::Sealed for CompiledShader<Ty> {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl<Ty: Type> crate::ThinGLObject for CompiledShader<Ty> {}
 
 /// Forget the compiled and source code bind status of the shader.
@@ -286,8 +286,8 @@ impl Program {
 }
 
 impl crate::sealed::Sealed for Program {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for Program {}
 
 /// A program which has been successfully linked.
@@ -305,6 +305,6 @@ impl From<LinkedProgram> for Program {
 }
 
 impl crate::sealed::Sealed for LinkedProgram {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for LinkedProgram {}

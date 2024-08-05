@@ -116,6 +116,6 @@ bitflags::bitflags! {
 pub struct Buffer(pub(crate) NonZeroName);
 
 impl crate::sealed::Sealed for Buffer {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for Buffer {}

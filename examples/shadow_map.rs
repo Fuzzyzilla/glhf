@@ -201,14 +201,14 @@ struct Window {
     window: winit::window::Window,
 
     program: glhf::program::LinkedProgram,
-    vertex_buffer: GLuint,
-    index_buffer: GLuint,
-    num_indices: GLsizei,
-    vbo: GLuint,
+    vertex_buffer: glhf::buffer::Buffer,
+    index_buffer: glhf::buffer::Buffer,
+    num_indices: usize,
+    vao: glhf::vertex_array::VertexArray,
 
     shadow_program: glhf::program::LinkedProgram,
-    shadow_texture: GLuint,
-    shadow_framebuffer: GLuint,
+    shadow_texture: glhf::texture::Texture2D,
+    shadow_framebuffer: glhf::framebuffer::Complete,
 }
 impl Window {
     fn new(event_loop: &winit::event_loop::ActiveEventLoop) -> Self {
@@ -416,10 +416,10 @@ impl Window {
         // We've compiled all we need :3
         gl.hint.release_compiler();
 
-        let [shadow] = gl.create.textures();
+        let [shadow_texture] = gl.create.textures();
         let [shadow_framebuffer] = gl.create.framebuffers();
 
-        let (shadow, texture_slot) = gl.texture.d2.initialize(shadow);
+        let (shadow_texture, texture_slot) = gl.texture.d2.initialize(shadow_texture);
         texture_slot
             .storage(
                 1.try_into().unwrap(),
@@ -436,7 +436,7 @@ impl Window {
         gl.framebuffer
             .draw
             .bind(&shadow_framebuffer)
-            .texture_2d(&shadow, glhf::framebuffer::Attachment::Depth, 0)
+            .texture_2d(&shadow_texture, glhf::framebuffer::Attachment::Depth, 0)
             // No fragment outputs.
             .draw_buffers(&[]);
 
@@ -445,9 +445,6 @@ impl Window {
             .draw
             .try_complete(shadow_framebuffer)
             .unwrap();
-
-        let shadow_texture = shadow.into_name().get();
-        let shadow_framebuffer = shadow_framebuffer.into_name().get();
 
         // Camera at +,+ looking roughly towards origin.
         let camera_matrix = {
@@ -559,120 +556,16 @@ impl Window {
             program,
 
             num_indices,
-            index_buffer: index_buffer.into_name().get(),
-            vertex_buffer: vertex_buffer.into_name().get(),
-            vbo: vao.into_name().get(),
+            index_buffer,
+            vertex_buffer,
+            vao,
 
             shadow_texture,
             shadow_framebuffer,
             shadow_program,
         }
     }
-    unsafe fn compile(vertex: &str, fragment: Option<&str>) -> anyhow::Result<GLuint> {
-        let program = gl::CreateProgram();
 
-        let compile_shader = |ty: gl::types::GLenum, src: &str| -> anyhow::Result<GLuint> {
-            let shader = gl::CreateShader(ty);
-            let sources = [src.as_ptr().cast::<GLchar>()];
-            let lengths = [GLint::try_from(src.len())?];
-            // Sources *may* have nul-bytes, as they are UTF8 - I couldn't find any verbage that says this *isn't* allowed ;3
-            gl::ShaderSource(shader, 1, sources.as_ptr(), lengths.as_ptr());
-            Self::err();
-            gl::CompileShader(shader);
-            Self::err();
-            let mut was_successful = gl::FALSE.into();
-            gl::GetShaderiv(
-                shader,
-                gl::COMPILE_STATUS,
-                std::ptr::addr_of_mut!(was_successful),
-            );
-            Self::err();
-            if was_successful == gl::FALSE.into() {
-                let mut length = 0;
-                gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, std::ptr::addr_of_mut!(length));
-                Self::err();
-                let mut string_bytes = vec![0; length.try_into().unwrap()];
-                gl::GetShaderInfoLog(
-                    shader,
-                    string_bytes.len().try_into().unwrap(),
-                    std::ptr::null_mut(),
-                    string_bytes.as_mut_ptr(),
-                );
-                Self::err();
-                // i8 -> u8 reinterpret.
-                let (ptr, len, cap) = (
-                    string_bytes.as_mut_ptr(),
-                    string_bytes.len(),
-                    string_bytes.capacity(),
-                );
-                std::mem::forget(string_bytes);
-                let string_bytes = Vec::from_raw_parts(ptr.cast::<u8>(), len, cap);
-
-                let cstr = std::ffi::CString::from_vec_with_nul(string_bytes).unwrap();
-                anyhow::bail!("shader failed to compile:\n{cstr:?}");
-            }
-            Ok(shader)
-        };
-
-        let vertex = compile_shader(gl::VERTEX_SHADER, vertex)?;
-        gl::AttachShader(program, vertex);
-        Self::err();
-        let fragment = if let Some(fragment) = fragment {
-            let fragment = compile_shader(gl::FRAGMENT_SHADER, fragment)?;
-            gl::AttachShader(program, fragment);
-            Self::err();
-            Some(fragment)
-        } else {
-            None
-        };
-
-        gl::LinkProgram(program);
-
-        let mut was_successful = gl::FALSE.into();
-        gl::GetProgramiv(
-            program,
-            gl::LINK_STATUS,
-            std::ptr::addr_of_mut!(was_successful),
-        );
-        Self::err();
-        if was_successful == gl::FALSE.into() {
-            let mut length = 0;
-            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, std::ptr::addr_of_mut!(length));
-            Self::err();
-            let mut string_bytes = vec![0; length.try_into().unwrap()];
-            gl::GetProgramInfoLog(
-                program,
-                string_bytes.len().try_into().unwrap(),
-                std::ptr::null_mut(),
-                string_bytes.as_mut_ptr(),
-            );
-            Self::err();
-            // i8 -> u8 reinterpret.
-            let (ptr, len, cap) = (
-                string_bytes.as_mut_ptr(),
-                string_bytes.len(),
-                string_bytes.capacity(),
-            );
-            std::mem::forget(string_bytes);
-            let string_bytes = Vec::from_raw_parts(ptr.cast::<u8>(), len, cap);
-
-            let cstr = std::ffi::CString::from_vec_with_nul(string_bytes).unwrap();
-            anyhow::bail!("program failed to link:\n{cstr:?}");
-        }
-
-        gl::DetachShader(program, vertex);
-        Self::err();
-        gl::DeleteShader(vertex);
-        Self::err();
-        if let Some(fragment) = fragment {
-            gl::DetachShader(program, fragment);
-            Self::err();
-            gl::DeleteShader(fragment);
-            Self::err();
-        }
-
-        Ok(program)
-    }
     fn err() {
         let err = unsafe { gl::GetError() };
         let string: Option<std::borrow::Cow<str>> = match err {
@@ -688,59 +581,65 @@ impl Window {
         }
     }
     fn redraw(&mut self) {
+        let mut gl = unsafe { glhf::GLHF::current() };
         unsafe {
-            Self::err();
-            gl::BindFramebuffer(gl::FRAMEBUFFER, self.shadow_framebuffer);
             gl::Enable(gl::CULL_FACE);
             gl::CullFace(gl::FRONT);
-            Self::err();
-            gl::UseProgram(self.shadow_program.name().get());
-            Self::err();
             gl::Enable(gl::DEPTH_TEST);
             gl::DepthFunc(gl::LESS);
             gl::Clear(gl::DEPTH_BUFFER_BIT);
+        }
+        let vertex_array = gl.vertex_array.bind(&self.vao);
+        let array = gl.buffer.array.bind(&self.vertex_buffer);
+        let elements = gl.buffer.element_array.bind(&self.index_buffer);
+        let framebuffer = gl.framebuffer.draw.bind_complete(&self.shadow_framebuffer);
+        let program = gl.program.bind(&self.shadow_program);
 
-            Self::err();
-            gl::BindVertexArray(self.vbo);
-            Self::err();
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vertex_buffer);
-            Self::err();
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.index_buffer);
-            Self::err();
-            gl::EnableVertexAttribArray(0);
-            Self::err();
-            gl::EnableVertexAttribArray(1);
-            Self::err();
-            gl::DrawElements(
-                gl::TRIANGLES,
-                self.num_indices,
-                gl::UNSIGNED_SHORT,
-                std::ptr::null(),
-            );
-            Self::err();
+        let draw_info = glhf::draw::ElementsState {
+            array: &array,
+            elements: &elements,
+            framebuffer: &framebuffer,
+            program: &program,
+            vertex_array: &vertex_array,
+        };
+        gl.draw.elements(
+            glhf::draw::Topology::Triangles,
+            glhf::draw::ElementType::U16,
+            0..self.num_indices,
+            1,
+            draw_info,
+        );
 
+        let framebuffer = gl.framebuffer.draw.bind_default();
+        let program = gl.program.bind(&self.program);
+
+        unsafe {
             gl::CullFace(gl::BACK);
-            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
-            Self::err();
-            gl::UseProgram(self.program.name().get());
-            Self::err();
             gl::ClearColor(0.0, 0.5, 0.8, 1.0);
             Self::err();
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
             Self::err();
 
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.shadow_texture);
-            Self::err();
-            gl::DrawElements(
-                gl::TRIANGLES,
-                self.num_indices,
-                gl::UNSIGNED_SHORT,
-                std::ptr::null(),
-            );
-
+            gl::BindTexture(gl::TEXTURE_2D, self.shadow_texture.name().get());
             Self::err();
         }
+
+        let draw_info = glhf::draw::ElementsState {
+            array: &array,
+            elements: &elements,
+            framebuffer: &framebuffer,
+            program: &program,
+            vertex_array: &vertex_array,
+        };
+        gl.draw.elements(
+            glhf::draw::Topology::Triangles,
+            glhf::draw::ElementType::U16,
+            0..self.num_indices,
+            1,
+            draw_info,
+        );
+
         self.window.pre_present_notify();
         self.surface.swap_buffers(&self.context).unwrap();
     }

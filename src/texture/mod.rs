@@ -391,10 +391,10 @@ pub type TextureCube = Texture<Cube>;
 pub struct Stateless(pub(crate) NonZeroName);
 
 impl crate::sealed::Sealed for Stateless {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for Stateless {}
 impl<Dim: Dimensionality> crate::sealed::Sealed for Texture<Dim> {}
-/// # Safety
-/// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl<Dim: Dimensionality> crate::ThinGLObject for Texture<Dim> {}

@@ -43,12 +43,12 @@ impl Target for Read {
 }
 
 #[derive(Debug)]
-pub struct Active<'slot, Slot, Kind>(
+pub struct Active<'slot, Slot, Kind, Completeness>(
     std::marker::PhantomData<&'slot ()>,
-    std::marker::PhantomData<(Kind, Slot)>,
+    std::marker::PhantomData<(Kind, Slot, Completeness)>,
 );
 
-impl<T: Target> Active<'_, T, NotDefault> {
+impl<T: Target> Active<'_, T, NotDefault, Incomplete> {
     pub fn texture_2d(&self, texture: &Texture2D, attachment: Attachment, mip_level: u32) -> &Self {
         unsafe {
             gl::FramebufferTexture2D(
@@ -63,7 +63,7 @@ impl<T: Target> Active<'_, T, NotDefault> {
     }
 }
 
-impl Active<'_, Draw, NotDefault> {
+impl<AnyCompleteness> Active<'_, Draw, NotDefault, AnyCompleteness> {
     /// Direct fragment outputs into appropriate buffers.
     /// I.e., Fragment output 0 will go into the buffer defined by `buffers[0]`.
     /// If the slice is too short, remaining slots default to [`DrawBuffers::None`]
@@ -77,7 +77,7 @@ impl Active<'_, Draw, NotDefault> {
     }
 }
 
-impl Active<'_, Draw, Default> {
+impl Active<'_, Draw, Default, Complete> {
     /// Direct fragment outputs into appropriate buffers.
     /// I.e., Fragment output 0 will go into the buffer defined by `buffers[0]`.
     /// If the slice is too short, remaining slots default to [`DrawBuffers::None`]
@@ -91,7 +91,7 @@ impl Active<'_, Draw, Default> {
     }
 }
 
-impl Active<'_, Read, NotDefault> {
+impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
     /// Set the source for pixel read operations.
     pub fn read_buffer(&self, buffer: Buffer) -> &Self {
         unsafe { gl::ReadBuffer(buffer.as_gl()) }
@@ -99,7 +99,7 @@ impl Active<'_, Read, NotDefault> {
     }
 }
 
-impl Active<'_, Draw, Default> {
+impl Active<'_, Draw, Default, Complete> {
     /// Set the source for pixel read operations.
     pub fn read_buffer(&self, buffer: DefaultBuffer) -> &Self {
         unsafe { gl::ReadBuffer(buffer.as_gl()) }
@@ -112,7 +112,7 @@ impl Active<'_, Draw, Default> {
 pub struct IncompleteError<'slot, Slot> {
     /// The activation token of the framebuffer. Even if it failed to pass completion,
     /// it is bound.
-    pub active: Active<'slot, Slot, NotDefault>,
+    pub active: Active<'slot, Slot, NotDefault, Incomplete>,
     /// Returns ownership of the framebuffer.
     pub framebuffer: Incomplete,
     pub kind: IncompleteErrorKind,
@@ -158,7 +158,14 @@ impl IncompleteErrorKind {
 pub struct Slot<T: Target>(pub(crate) NotSync, pub(crate) std::marker::PhantomData<T>);
 impl<T: Target> Slot<T> {
     /// Bind a user-defined framebuffer to this slot.
-    pub fn bind(&mut self, framebuffer: &Incomplete) -> Active<T, NotDefault> {
+    pub fn bind(&mut self, framebuffer: &Incomplete) -> Active<T, NotDefault, Incomplete> {
+        unsafe {
+            gl::BindFramebuffer(T::TARGET, framebuffer.0.get());
+        }
+        Active(std::marker::PhantomData, std::marker::PhantomData)
+    }
+    /// Bind a user-defined framebuffer to this slot.
+    pub fn bind_complete(&mut self, framebuffer: &Complete) -> Active<T, NotDefault, Complete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, framebuffer.0.get());
         }
@@ -171,12 +178,16 @@ impl<T: Target> Slot<T> {
     pub fn try_complete(
         &mut self,
         framebuffer: Incomplete,
-    ) -> Result<(Complete, Active<T, NotDefault>), IncompleteError<T>> {
+    ) -> Result<(Complete, Active<T, NotDefault, Complete>), IncompleteError<T>> {
         let active = self.bind(&framebuffer);
         let status = unsafe { gl::CheckFramebufferStatus(T::TARGET) };
         if status == gl::FRAMEBUFFER_COMPLETE {
-            // Safety - we just checked, dummy!
-            Ok((unsafe { framebuffer.into_complete_unchecked() }, active))
+            Ok((
+                // Safety - we just checked, dummy!
+                unsafe { framebuffer.into_complete_unchecked() },
+                // Safety - from zst to zst. Chaging Active<T, NotDefault, Incomplete> to Active<T, NotDefault, Complete>.
+                unsafe { std::mem::transmute(active) },
+            ))
         } else {
             Err(IncompleteError {
                 active,
@@ -186,7 +197,7 @@ impl<T: Target> Slot<T> {
         }
     }
     /// Bind the default framebuffer, 0, to this slot.
-    pub fn bind_default(&mut self) -> Active<T, Default> {
+    pub fn bind_default(&mut self) -> Active<T, Default, Complete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, 0);
         }
@@ -195,7 +206,7 @@ impl<T: Target> Slot<T> {
     /// Inherit the currently bound framebuffer. This may be the default framebuffer.
     ///
     /// Some functionality is limited when the type of framebuffer (Default or NotDefault) is not known.
-    pub fn get(&self) -> Active<T, Unknown> {
+    pub fn get(&self) -> Active<T, Unknown, Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
 }
@@ -211,7 +222,28 @@ impl Slots {
     pub fn bind(
         &mut self,
         framebuffer: &Incomplete,
-    ) -> (Active<Read, NotDefault>, Active<Draw, NotDefault>) {
+    ) -> (
+        Active<Read, NotDefault, Incomplete>,
+        Active<Draw, NotDefault, Incomplete>,
+    ) {
+        unsafe {
+            gl::BindFramebuffer(gl::FRAMEBUFFER, framebuffer.0.get());
+        }
+        (
+            Active(std::marker::PhantomData, std::marker::PhantomData),
+            Active(std::marker::PhantomData, std::marker::PhantomData),
+        )
+    }
+    /// Bind a framebuffer to both the read and the draw slots.
+    ///
+    /// Refer to the individual slots to bind individually.
+    pub fn bind_complete(
+        &mut self,
+        framebuffer: &Complete,
+    ) -> (
+        Active<Read, NotDefault, Complete>,
+        Active<Draw, NotDefault, Complete>,
+    ) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, framebuffer.0.get());
         }
@@ -223,7 +255,12 @@ impl Slots {
     /// Bind the default framebuffer to both the read and the draw slots.
     ///
     /// Refer to the individual slots to bind individually.
-    pub fn bind_default(&mut self) -> (Active<Read, Default>, Active<Draw, Default>) {
+    pub fn bind_default(
+        &mut self,
+    ) -> (
+        Active<Read, Default, Complete>,
+        Active<Draw, Default, Complete>,
+    ) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         }
