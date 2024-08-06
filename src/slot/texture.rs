@@ -8,6 +8,7 @@ use crate::{
     DepthCompareFunc, GLEnum, GLenum, NonZero, NotSync,
 };
 
+/// Entry points for `glTex*`
 pub struct Active<'slot, Dim: Dimensionality>(
     std::marker::PhantomData<&'slot ()>,
     std::marker::PhantomData<Dim>,
@@ -91,7 +92,7 @@ impl<Dim: Dimensionality> Slot<Dim> {
     /// Bind a texture, returning an active token.
     pub fn bind(&mut self, texture: &Texture<Dim>) -> Active<Dim> {
         unsafe { gl::BindTexture(Dim::TARGET, texture.0.get()) };
-        self.get()
+        self.inherit()
     }
     /// Bind a stateless texture, turning it into a `Texture` with the dimensionality of this slot.
     pub fn initialize(&mut self, texture: Stateless) -> (Texture<Dim>, Active<Dim>) {
@@ -102,7 +103,7 @@ impl<Dim: Dimensionality> Slot<Dim> {
         (texture, bind)
     }
     /// Inherit the currently bound texture. This may be the default texture.
-    pub fn get(&self) -> Active<Dim> {
+    pub fn inherit(&self) -> Active<Dim> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Delete textures. If any were bound to this slot, the slot becomes bound to the default texture.
@@ -126,4 +127,16 @@ pub struct Slots {
     pub d2_array: Slot2DArray,
     /// `TEXTURE_CUBE_MAP`
     pub cube: SlotCube,
+}
+impl Slots {
+    /// Set the currently active texture unit. Corresponds to `glActiveTexture(GL_TEXTURE<slot>)`
+    ///
+    /// Each texture unit has its own current textures for all bind points. As such,
+    /// this invalidates all [`Active`] texture handles.
+    pub fn unit(&mut self, slot: u32) -> &mut Self {
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE0.checked_add(slot).unwrap());
+        }
+        self
+    }
 }

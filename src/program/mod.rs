@@ -138,7 +138,7 @@ pub mod uniform {
         // Ironic to have this in an enum called "Vector", huh?
         /// Scalar value(s).
         ///
-        /// `u32` is a special scalar type which may be used to bind some opaque
+        /// `i32` is a special scalar type which may be used to bind some opaque
         /// objects, e.g. `sampler2D`.
         ///
         /// It is not valid to pass e.g. 4 scalars for a Vec4 value.

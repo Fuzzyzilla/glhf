@@ -1,5 +1,6 @@
 use crate::{
     gl::{self, types::GLenum},
+    slot::marker::{IsDefault, NotDefault, Unknown},
     vertex_array::{self, VertexArray},
     GLEnum, NotSync, ThinGLObject,
 };
@@ -9,19 +10,7 @@ use crate::{
 // client pointers could be bound to object 0, yikes! We don't do this, and
 // instead treat object 0 as null.
 
-/// Marker for an active array which is known to be null. When a slot is
-/// in this state, some of it's operations may instead be directed to
-/// global state.
-#[derive(Debug)]
-pub struct Empty;
-/// Marker for an active buffer is unknown whether it is the null or not.
-#[derive(Debug)]
-pub struct Unknown;
-/// Marker for an active buffer which is known to be non-null.
-#[derive(Debug)]
-pub struct NotEmpty;
-
-impl Active<'_, NotEmpty> {
+impl Active<'_, NotDefault> {
     /// Set the properties of a vertex attribute slot.
     /// See [`vertex_array::Attribute`].
     ///
@@ -101,6 +90,7 @@ impl Active<'_, NotEmpty> {
     }
 }
 
+/// Entry points for `gl*VertexAttrib*`.
 pub struct Active<'slot, Kind>(
     std::marker::PhantomData<&'slot ()>,
     std::marker::PhantomData<Kind>,
@@ -108,14 +98,14 @@ pub struct Active<'slot, Kind>(
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// Bind a user-defined array to this slot.
-    pub fn bind(&mut self, array: &VertexArray) -> Active<NotEmpty> {
+    pub fn bind(&mut self, array: &VertexArray) -> Active<NotDefault> {
         unsafe {
             gl::BindVertexArray(array.name().get());
         }
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Make the slot empty.
-    pub fn unbind(&mut self) -> Active<Empty> {
+    pub fn unbind(&mut self) -> Active<IsDefault> {
         unsafe {
             gl::BindVertexArray(0);
         }
@@ -124,7 +114,7 @@ impl Slot {
     /// Inherit the currently bound array - this may be no array at all.
     ///
     /// Most functionality is limited when the status of the array (Empty or NotEmpty) is not known.
-    pub fn get(&self) -> Active<Unknown> {
+    pub fn inherit(&self) -> Active<Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Delete vertex arrays. If any were bound to this slot, the slot becomes unbound.

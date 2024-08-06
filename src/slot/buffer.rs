@@ -1,21 +1,11 @@
 use crate::{
     buffer::{usage, Buffer},
-    gl, GLEnum, GLenum, NotSync, ThinGLObject,
+    gl,
+    slot::marker::{IsDefault, NotDefault, Unknown},
+    GLEnum, GLenum, NotSync, ThinGLObject,
 };
 
-/// Marker for an active buffer which is known to be null. When a slot is
-/// in this state, some of it's operations may instead be directed to host
-/// memory via a simple pointer.
-#[derive(Debug)]
-pub struct Empty;
-/// Marker for an active buffer is unknown whether it is the null or not.
-#[derive(Debug)]
-pub struct Unknown;
-/// Marker for an active buffer which is known to be non-null.
-#[derive(Debug)]
-pub struct NotEmpty;
-
-/// Marker trait for the many buffer targets.
+/// Marker trait for the many buffer binding targets.
 pub trait Target: crate::sealed::Sealed {
     const TARGET: GLenum;
 }
@@ -67,17 +57,23 @@ unsafe impl MapAccess for ReadWrite {
 // but it is hard to wrap safely - Rust's type system assumes writable implies readable, so
 // i'd instead need a bespoke opaque interface for a blackhole of bytes.
 
-pub struct BufferMapGuard<'active, 'slot: 'active, T: Target, Access: MapAccess> {
+/// Read (and possibly write, as specified by [`MapAccess`]) access to a GL buffer. The buffer
+/// memory is unmapped when this object is dropped.
+///
+/// This type dereferences to a (possibly mutable) byte slice.
+pub struct BufferMapGuard<'active, 'slot: 'active, Binding: Target, Access: MapAccess> {
     // We hold it the slot and buffer mutably, as it is an error to use the buffer for any operation
     // until it is unmapped. Holding it this way also ensures that Self::drop has safe access
     // to gl calls due to safety precondition of `crate::GLHF`.
-    _active: &'active mut Active<'slot, T, NotEmpty>,
+    _active: &'active mut Active<'slot, Binding, NotDefault>,
     access: std::marker::PhantomData<Access>,
     ptr: *mut u8,
     len: usize,
 }
 
-impl<T: Target, Access: MapAccess> std::ops::Deref for BufferMapGuard<'_, '_, T, Access> {
+impl<Binding: Target, Access: MapAccess> std::ops::Deref
+    for BufferMapGuard<'_, '_, Binding, Access>
+{
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
@@ -85,28 +81,29 @@ impl<T: Target, Access: MapAccess> std::ops::Deref for BufferMapGuard<'_, '_, T,
         unsafe { std::slice::from_raw_parts(self.ptr.cast_const(), self.len) }
     }
 }
-impl<T: Target> std::ops::DerefMut for BufferMapGuard<'_, '_, T, ReadWrite> {
+impl<Binding: Target> std::ops::DerefMut for BufferMapGuard<'_, '_, Binding, ReadWrite> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
         // Align is one.
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
-impl<T: Target, Access: MapAccess> Drop for BufferMapGuard<'_, '_, T, Access> {
+impl<Binding: Target, Access: MapAccess> Drop for BufferMapGuard<'_, '_, Binding, Access> {
     fn drop(&mut self) {
         unsafe {
             // Does raise errors, AFAIKT,
-            gl::UnmapBuffer(T::TARGET);
+            gl::UnmapBuffer(Binding::TARGET);
         }
     }
 }
 
+/// Entry points for `glBuffer*`
 #[derive(Debug)]
 pub struct Active<'slot, Slot, Kind>(
     std::marker::PhantomData<&'slot mut ()>,
     std::marker::PhantomData<(Kind, Slot)>,
 );
-impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
+impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
     /// (Re)allocate the datastore of the buffer and fill with bytes from `data`.
     // FIXME: The reference has verbage about the alignment of the buffer, and that
     // it must be properly aligned to the datatype of the buffer but... Well,, what
@@ -114,7 +111,7 @@ impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
     pub fn data(&self, data: &[u8], frequency: usage::Frequency, access: usage::Access) -> &Self {
         unsafe {
             gl::BufferData(
-                T::TARGET,
+                Binding::TARGET,
                 data.len().try_into().unwrap(),
                 data.as_ptr().cast(),
                 usage::as_gl(frequency, access),
@@ -135,7 +132,7 @@ impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
     ) -> &Self {
         unsafe {
             gl::BufferData(
-                T::TARGET,
+                Binding::TARGET,
                 len.try_into().unwrap(),
                 // Null for uninit
                 std::ptr::null(),
@@ -149,7 +146,7 @@ impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
     pub fn sub_data(&self, offset: usize, data: &[u8]) -> &Self {
         unsafe {
             gl::BufferSubData(
-                T::TARGET,
+                Binding::TARGET,
                 offset.try_into().unwrap(),
                 data.len().try_into().unwrap(),
                 data.as_ptr().cast(),
@@ -159,14 +156,25 @@ impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
     }
     /// Map a byte range. Use the marker types [`Read`] and [`ReadWrite`] to specify access mode.
     ///
-    /// If the range is unbounded to the right, a glGet is invoked to map the rest of the buffer size.
+    /// If the range is unbounded to the right, a `glGet` is invoked to map the rest of the buffer size.
+    ///
+    /// Usage:
+    /// ```no_run
+    /// use glhf::{slot::buffer};
+    /// # let gl : glhf::GLHF = todo!();
+    /// # let buffer : glhf::buffer::Buffer = todo!();
+    ///
+    /// gl.buffer.array.bind(&buffer)
+    ///     .map::<buffer::ReadWrite>(..)
+    ///     .fill(10u8);
+    /// ```
     /// # Panics
     /// If the range end is before the beginning.
     // FIXME: same alignment confusion as `Self::data`.
     pub fn map<'this, Access: MapAccess>(
         &'this mut self,
         range: impl std::ops::RangeBounds<usize>,
-    ) -> BufferMapGuard<'this, 'slot, T, Access> {
+    ) -> BufferMapGuard<'this, 'slot, Binding, Access> {
         use std::ops::Bound;
         let left = range.start_bound().cloned();
         let right = range.end_bound().cloned();
@@ -182,7 +190,7 @@ impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
                 // Query the size of the buffer.
                 let mut size = 0;
                 gl::GetBufferParameteri64v(
-                    T::TARGET,
+                    Binding::TARGET,
                     gl::BUFFER_SIZE,
                     std::ptr::addr_of_mut!(size),
                 );
@@ -201,10 +209,10 @@ impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
         &'this mut self,
         offset: usize,
         len: usize,
-    ) -> BufferMapGuard<'this, 'slot, T, Access> {
+    ) -> BufferMapGuard<'this, 'slot, Binding, Access> {
         let ptr = unsafe {
             gl::MapBufferRange(
-                T::TARGET,
+                Binding::TARGET,
                 offset.try_into().unwrap(),
                 len.try_into().unwrap(),
                 Access::FLAGS,
@@ -222,26 +230,29 @@ impl<'slot, T: Target> Active<'slot, T, NotEmpty> {
     }
 }
 
-pub struct Slot<T: Target>(pub(crate) NotSync, pub(crate) std::marker::PhantomData<T>);
-impl<T: Target> Slot<T> {
+pub struct Slot<Binding: Target>(
+    pub(crate) NotSync,
+    pub(crate) std::marker::PhantomData<Binding>,
+);
+impl<Binding: Target> Slot<Binding> {
     /// Bind a buffer to this slot.
-    pub fn bind(&mut self, buffer: &Buffer) -> Active<T, NotEmpty> {
+    pub fn bind(&mut self, buffer: &Buffer) -> Active<Binding, NotDefault> {
         unsafe {
-            gl::BindBuffer(T::TARGET, buffer.name().get());
+            gl::BindBuffer(Binding::TARGET, buffer.name().get());
         }
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Make the slot empty.
-    pub fn unbind(&mut self) -> Active<T, Empty> {
+    pub fn unbind(&mut self) -> Active<Binding, IsDefault> {
         unsafe {
-            gl::BindBuffer(T::TARGET, 0);
+            gl::BindBuffer(Binding::TARGET, 0);
         }
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Inherit the currently bound buffer - this may be no buffer at all.
     ///
     /// Most functionality is limited when the status of the buffer (Empty or NotEmpty) is not known.
-    pub fn get(&self) -> Active<T, Unknown> {
+    pub fn inherit(&self) -> Active<Binding, Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
 }

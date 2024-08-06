@@ -491,13 +491,14 @@ impl Window {
         let shadow_matrix = glhf::program::uniform::Mat4::from(
             shadow_matrix.as_component_array().map(|v| *v.as_array()),
         );
+        Self::err();
 
         gl.program
             .bind(&program)
             .uniform_matrix(0, &camera_matrix)
             .uniform_matrix(4, &shadow_matrix)
             // Bind texture unit 0
-            .uniform(8, &0u32);
+            .uniform(8, &0i32);
 
         gl.program
             .bind(&shadow_program)
@@ -519,8 +520,6 @@ impl Window {
             glhf::buffer::usage::Access::Draw,
         );
 
-        let num_indices = indices.len().try_into().unwrap();
-
         let [vao] = gl.create.vertex_arrays();
 
         let stride = std::mem::size_of::<Vertex>().try_into().unwrap();
@@ -529,7 +528,7 @@ impl Window {
             .attribute(
                 0,
                 vertex_array::Attribute {
-                    ty: vertex_array::AttributeType::Float(vertex_array::FloatingAttribute::F32),
+                    ty: vertex_array::FloatingAttribute::F32.into(),
                     components: vertex_array::Components::Vec3,
                     stride: Some(stride),
                     offset: std::mem::offset_of!(Vertex, pos),
@@ -540,7 +539,7 @@ impl Window {
             .attribute(
                 1,
                 vertex_array::Attribute {
-                    ty: vertex_array::AttributeType::Float(vertex_array::FloatingAttribute::F32),
+                    ty: vertex_array::FloatingAttribute::F32.into(),
                     components: vertex_array::Components::Vec3,
                     stride: Some(stride),
                     offset: std::mem::offset_of!(Vertex, normal),
@@ -555,7 +554,7 @@ impl Window {
             window,
             program,
 
-            num_indices,
+            num_indices: indices.len(),
             index_buffer,
             vertex_buffer,
             vao,
@@ -583,16 +582,19 @@ impl Window {
     fn redraw(&mut self) {
         let mut gl = unsafe { glhf::GLHF::current() };
         unsafe {
+            gl::ClearColor(0.0, 0.5, 0.8, 1.0);
+            gl::ClearDepthf(1.0);
             gl::Enable(gl::CULL_FACE);
             gl::CullFace(gl::FRONT);
             gl::Enable(gl::DEPTH_TEST);
             gl::DepthFunc(gl::LESS);
-            gl::Clear(gl::DEPTH_BUFFER_BIT);
         }
-        let vertex_array = gl.vertex_array.bind(&self.vao);
+
         let array = gl.buffer.array.bind(&self.vertex_buffer);
         let elements = gl.buffer.element_array.bind(&self.index_buffer);
+        let vertex_array = gl.vertex_array.bind(&self.vao);
         let framebuffer = gl.framebuffer.draw.bind_complete(&self.shadow_framebuffer);
+        framebuffer.clear(glhf::slot::framebuffer::AspectMask::all());
         let program = gl.program.bind(&self.shadow_program);
 
         let draw_info = glhf::draw::ElementsState {
@@ -611,19 +613,16 @@ impl Window {
         );
 
         let framebuffer = gl.framebuffer.draw.bind_default();
+        framebuffer.clear(glhf::slot::framebuffer::AspectMask::all());
+
         let program = gl.program.bind(&self.program);
 
         unsafe {
             gl::CullFace(gl::BACK);
-            gl::ClearColor(0.0, 0.5, 0.8, 1.0);
-            Self::err();
-            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            Self::err();
-
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.shadow_texture.name().get());
             Self::err();
         }
+
+        gl.texture.unit(0).d2.bind(&self.shadow_texture);
 
         let draw_info = glhf::draw::ElementsState {
             array: &array,

@@ -7,6 +7,7 @@ use crate::{
         self, CompiledShader, EmptyShader, Fragment, LinkedProgram, Program, ProgramShaders, Type,
         Vertex,
     },
+    slot::marker::{IsDefault, NotDefault, Unknown},
     NotSync, ThinGLObject,
 };
 unsafe fn info_log(
@@ -48,17 +49,6 @@ unsafe fn program_log(program: GLuint) -> std::ffi::CString {
     info_log(program, gl::GetProgramiv, gl::GetProgramInfoLog)
 }
 
-/// Marker for an active program is known to be null.
-/// In this state, the results of shader execution are undefined.
-#[derive(Debug)]
-pub struct Empty;
-/// Marker for an active program that is unknown whether it is the null or not.
-#[derive(Debug)]
-pub struct Unknown;
-/// Marker for an active program which is known to be non-null.
-#[derive(Debug)]
-pub struct NotEmpty;
-
 #[derive(Debug)]
 #[must_use = "dropping a gl handle leaks memory"]
 pub struct CompileError<Ty: Type> {
@@ -73,7 +63,7 @@ pub struct LinkError {
     pub error: std::ffi::CString,
 }
 
-impl Active<'_, NotEmpty> {
+impl Active<'_, NotDefault> {
     /// Starting at `base_location`, bind one (or an array) of uniform scalars or vectors.
     /// The value may only be an array if it was declared as an array within the shader.
     ///
@@ -238,21 +228,22 @@ impl Active<'_, NotEmpty> {
     }
 }
 
+/// Entry points for working with `glUse`d programs.
 pub struct Active<'slot, Kind>(
     std::marker::PhantomData<&'slot ()>,
     std::marker::PhantomData<Kind>,
 );
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
-    /// Bind a user-defined program to this slot.
-    pub fn bind(&mut self, program: &LinkedProgram) -> Active<NotEmpty> {
+    /// `glUse` a linked program.
+    pub fn bind(&mut self, program: &LinkedProgram) -> Active<NotDefault> {
         unsafe {
             gl::UseProgram(program.name().get());
         }
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
-    /// Make the slot empty.
-    pub fn unbind(&mut self) -> Active<Empty> {
+    /// Make the used program slot empty.
+    pub fn unbind(&mut self) -> Active<IsDefault> {
         unsafe {
             gl::UseProgram(0);
         }
@@ -332,7 +323,7 @@ impl Slot {
     /// Inherit the currently bound program - this may be no program at all.
     ///
     /// Most functionality is limited when the status of the program (Empty or NotEmpty) is not known.
-    pub fn get(&self) -> Active<Unknown> {
+    pub fn inherit(&self) -> Active<Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Delete a program. If the program is currently bound to the slot, it remains so

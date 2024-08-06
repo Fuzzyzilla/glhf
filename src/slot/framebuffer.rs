@@ -1,7 +1,8 @@
 use crate::{
     framebuffer::{Attachment, Buffer, Complete, DefaultBuffer, Incomplete},
     gl,
-    texture::Texture2D,
+    slot::marker::{Defaultness, IsDefault, NotDefault, Unknown},
+    texture::{Dimensionality, Texture2D},
     GLEnum, GLenum, NotSync, ThinGLObject,
 };
 
@@ -11,16 +12,6 @@ fn is_all_unique<T: Eq>(slice: &[T]) -> bool {
     // https://stackoverflow.com/a/46766782 cuz I was too lazy
     (1..slice.len()).all(|i| !slice[i..].contains(&slice[i - 1]))
 }
-
-/// Marker for an active framebuffer which is known to be the default framebuffer.
-#[derive(Debug)]
-pub struct Default;
-/// Marker for an active framebuffer is unknown whether it is the default or not.
-#[derive(Debug)]
-pub struct Unknown;
-/// Marker for an active framebuffer which is known not to be the default framebuffer.
-#[derive(Debug)]
-pub struct NotDefault;
 
 /// Marker trait for the two framebuffer targets, [`Draw`] and [`Read`]
 pub trait Target: crate::sealed::Sealed {
@@ -42,10 +33,48 @@ impl Target for Read {
     const TARGET: GLenum = gl::READ_FRAMEBUFFER;
 }
 
+bitflags::bitflags! {
+    /// Defines which aspects of a framebuffer to affect.
+    #[repr(transparent)]
+    pub struct AspectMask: gl::types::GLbitfield {
+        /// All current color attachments (contextually defined by `Active::draw_buffers` or
+        /// `Active::read_buffer`, depending on if this is used for a read or write operation)
+        const COLOR = gl::COLOR_BUFFER_BIT;
+        /// The depth attachment, if any.
+        const DEPTH = gl::DEPTH_BUFFER_BIT;
+        /// The stencil attachment, if any.
+        const STENCIL = gl::STENCIL_BUFFER_BIT;
+    }
+}
+
+/// Specifies a rectangle to blit.
+/// It is not specified whether which corner `from` and `to` refer to,
+/// as it is arbitrary as long as both `read` and `write` rectangles agree.
+///
+/// One rectangle may be the mirror of the other, which will cause the transferred
+/// image to be flipped.
+struct BlitRectangle {
+    /// Lower bound, inclusive.
+    from: [i32; 2],
+    /// Upper bound, exclusive.
+    to_exclusive: [i32; 2],
+}
+pub struct BlitInfo {
+    read: BlitRectangle,
+    write: BlitRectangle,
+    /// If enlarging, what filter should be applied to the color planes?
+    filter: crate::texture::Filter,
+    /// Which aspects to copy?
+    ///
+    /// If this contains Depth or Stencil, [`Self::filter`] must be `Nearest`.
+    mask: AspectMask,
+}
+
+/// Entry points for `glFramebuffer*`
 #[derive(Debug)]
-pub struct Active<'slot, Slot, Kind, Completeness>(
+pub struct Active<'slot, Slot, Default: Defaultness, Completeness>(
     std::marker::PhantomData<&'slot ()>,
-    std::marker::PhantomData<(Kind, Slot, Completeness)>,
+    std::marker::PhantomData<(Default, Slot, Completeness)>,
 );
 
 impl<T: Target> Active<'_, T, NotDefault, Incomplete> {
@@ -57,6 +86,145 @@ impl<T: Target> Active<'_, T, NotDefault, Incomplete> {
                 Texture2D::TARGET,
                 texture.name().into(),
                 mip_level.try_into().unwrap(),
+            );
+        }
+        self
+    }
+}
+
+impl<AnyDefaultness: Defaultness> Active<'_, Draw, AnyDefaultness, Complete> {
+    /// Blit data from the read buffer into this buffer.
+    ///
+    /// The read buffer's current color attachment ([`Active::read_buffer`]) is copied
+    /// to each of this buffer's [`Active::draw_buffers`].
+    ///
+    /// # Safety
+    /// If the read buffer and any of the draw buffers refer to the same resource and the source
+    /// and destination rectangles overlap, behavior is undefined.
+    pub unsafe fn blit_from<OtherDefaultness: Defaultness>(
+        &self,
+        _from: &Active<Read, OtherDefaultness, Complete>,
+        info: &BlitInfo,
+    ) -> &Self {
+        if info.mask.is_empty() {
+            return self;
+        }
+        unsafe {
+            gl::BlitFramebuffer(
+                info.read.from[0],
+                info.read.from[1],
+                info.read.to_exclusive[0],
+                info.read.to_exclusive[1],
+                info.write.from[0],
+                info.write.from[1],
+                info.write.to_exclusive[0],
+                info.write.to_exclusive[1],
+                info.mask.bits(),
+                match info.filter {
+                    crate::texture::Filter::Linear => gl::LINEAR,
+                    crate::texture::Filter::Nearest => gl::NEAREST,
+                },
+            );
+        }
+
+        self
+    }
+    /// Clear color, depth, and/or stencil buffers. Aspects not contained in the framebuffer are ignored.
+    ///
+    /// Affected color buffers are limited to those selected by [`Self::draw_buffers`].
+    ///
+    /// The clear values are inherited from the global values `ClearColor`, `ClearDepth`, and `ClearStencil`.
+    pub fn clear(&self, mask: AspectMask) -> &Self {
+        if mask.is_empty() {
+            return self;
+        }
+        unsafe {
+            gl::Clear(mask.bits());
+        }
+        self
+    }
+}
+impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
+    /// Blit data from this buffer into the write buffer.
+    ///
+    /// This is the reverse of [Active<'_, Draw, OtherDefaultness, Complete>::blit_from],
+    /// see that function for more information.
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn blit_to<OtherDefaultness: Defaultness>(
+        &self,
+        other: &Active<'_, Draw, OtherDefaultness, Complete>,
+        info: &BlitInfo,
+    ) -> &Self {
+        other.blit_from(self, info);
+        self
+    }
+    /// Copy texels from the current [`Self::read_buffer`] to the given bound texture.
+    ///
+    /// Texels are taken from the read buffer starting at `source_offset`, and `size` texels
+    /// are trasferred to the texture mip given by `level` starting at `destination_offset`.
+    ///
+    /// `[0, 0]` is defined to be the lower-left corner.
+    ///
+    /// # Safety
+    /// If the source range extends beyond the extent of the current `read_buffer`, the values
+    /// transferred from those texels are undefined. This is *not* immediate UB, but it would
+    /// be UB for any read access to those values in the destination texture.
+    pub unsafe fn copy_subimage_to(
+        &self,
+        _to: &crate::slot::texture::Active<'_, crate::texture::D2>,
+        level: u32,
+        // Intentionally signed. It is not UB to read beyond the buffer, but it is UB to access those values read.
+        // This may still be useful, idk X3
+        source_offset: [i32; 2],
+        destination_offset: [u32; 2],
+        size: [u32; 2],
+    ) -> &Self {
+        unsafe {
+            gl::CopyTexSubImage2D(
+                crate::texture::D2::TARGET,
+                level.try_into().unwrap(),
+                destination_offset[0].try_into().unwrap(),
+                destination_offset[1].try_into().unwrap(),
+                source_offset[0],
+                source_offset[1],
+                size[0].try_into().unwrap(),
+                size[1].try_into().unwrap(),
+            );
+        }
+        self
+    }
+    /// Copy texels from the current [`Self::read_buffer`] to the given bound texture.
+    ///
+    /// Texels are taken from the read buffer starting at `source_offset`, and `size` texels
+    /// are trasferred to the entire texture mip given by `level`.
+    ///
+    /// `[0, 0]` is defined to be the lower-left corner.
+    ///
+    /// # Safety
+    /// If the source range extends beyond the extent of the current `read_buffer`, the values
+    /// transferred from those texels are undefined. This is *not* immediate UB, but it would
+    /// be UB for any read access to those values in the destination texture.
+    pub unsafe fn copy_image_to(
+        &self,
+        _to: &crate::slot::texture::Active<'_, crate::texture::D2>,
+        level: u32,
+        // Fixme: this actually only accepts a subset of this enum.
+        internal_format: crate::texture::InternalFormat,
+        // Intentionally signed. It is not UB to read beyond the buffer, but it is UB to access those values read.
+        // This may still be useful, idk X3
+        source_offset: [i32; 2],
+        size: [u32; 2],
+    ) -> &Self {
+        unsafe {
+            gl::CopyTexImage2D(
+                crate::texture::D2::TARGET,
+                level.try_into().unwrap(),
+                internal_format.as_gl(),
+                source_offset[0],
+                source_offset[1],
+                size[0].try_into().unwrap(),
+                size[1].try_into().unwrap(),
+                0,
             );
         }
         self
@@ -77,7 +245,7 @@ impl<AnyCompleteness> Active<'_, Draw, NotDefault, AnyCompleteness> {
     }
 }
 
-impl Active<'_, Draw, Default, Complete> {
+impl Active<'_, Draw, IsDefault, Complete> {
     /// Direct fragment outputs into appropriate buffers.
     /// I.e., Fragment output 0 will go into the buffer defined by `buffers[0]`.
     /// If the slice is too short, remaining slots default to [`DrawBuffers::None`]
@@ -99,7 +267,7 @@ impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
     }
 }
 
-impl Active<'_, Draw, Default, Complete> {
+impl Active<'_, Draw, IsDefault, Complete> {
     /// Set the source for pixel read operations.
     pub fn read_buffer(&self, buffer: DefaultBuffer) -> &Self {
         unsafe { gl::ReadBuffer(buffer.as_gl()) }
@@ -197,7 +365,7 @@ impl<T: Target> Slot<T> {
         }
     }
     /// Bind the default framebuffer, 0, to this slot.
-    pub fn bind_default(&mut self) -> Active<T, Default, Complete> {
+    pub fn bind_default(&mut self) -> Active<T, IsDefault, Complete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, 0);
         }
@@ -206,7 +374,7 @@ impl<T: Target> Slot<T> {
     /// Inherit the currently bound framebuffer. This may be the default framebuffer.
     ///
     /// Some functionality is limited when the type of framebuffer (Default or NotDefault) is not known.
-    pub fn get(&self) -> Active<T, Unknown, Unknown> {
+    pub fn inherit(&self) -> Active<T, Unknown, Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
 }
@@ -258,8 +426,8 @@ impl Slots {
     pub fn bind_default(
         &mut self,
     ) -> (
-        Active<Read, Default, Complete>,
-        Active<Draw, Default, Complete>,
+        Active<Read, IsDefault, Complete>,
+        Active<Draw, IsDefault, Complete>,
     ) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);

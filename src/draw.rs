@@ -8,13 +8,13 @@
 //! To remedy this, this API is built such that you must provide compile-time proof that
 //! configuration is properly set up.
 
-use crate::slot;
+use crate::slot::{self, marker};
 
-type ActiveProgram<'a> = slot::program::Active<'a, slot::program::NotEmpty>;
-type ActiveVertexArray<'a> = slot::vertex_array::Active<'a, slot::vertex_array::NotEmpty>;
-type ActiveArray<'a> = slot::buffer::Active<'a, slot::buffer::Array, slot::buffer::NotEmpty>;
+type ActiveProgram<'a> = slot::program::Active<'a, marker::NotDefault>;
+type ActiveVertexArray<'a> = slot::vertex_array::Active<'a, marker::NotDefault>;
+type ActiveArray<'a> = slot::buffer::Active<'a, slot::buffer::Array, marker::NotDefault>;
 type ActiveElementArray<'a> =
-    slot::buffer::Active<'a, slot::buffer::ElementArray, slot::buffer::NotEmpty>;
+    slot::buffer::Active<'a, slot::buffer::ElementArray, marker::NotDefault>;
 type ActiveDrawFramebuffer<'a, Defaultness> = slot::framebuffer::Active<
     'a,
     slot::framebuffer::Draw,
@@ -48,19 +48,28 @@ pub enum ElementType {
 unsafe impl GLEnum for ElementType {}
 
 #[derive(Copy, Clone)]
-pub struct ArraysState<'a, Defaultness> {
+pub struct ArraysState<'a, Default: marker::Defaultness> {
+    /// Static proof that a non-zero Array Buffer is bound.
     pub array: &'a ActiveArray<'a>,
+    /// Static proof that a non-null Vertex Array is bound.
     pub vertex_array: &'a ActiveVertexArray<'a>,
-    pub framebuffer: &'a ActiveDrawFramebuffer<'a, Defaultness>,
+    /// Static proof that a Complete framebuffer is bound.
+    pub framebuffer: &'a ActiveDrawFramebuffer<'a, Default>,
+    /// Static proof that a successfully-linked program is bound.
     pub program: &'a ActiveProgram<'a>,
 }
 
 #[derive(Copy, Clone)]
-pub struct ElementsState<'a, Defaultness> {
+pub struct ElementsState<'a, Default: marker::Defaultness> {
+    /// Static proof that a non-zero Array Buffer is bound.
     pub array: &'a ActiveArray<'a>,
+    /// Static proof that a non-null Element Array is bound.
     pub elements: &'a ActiveElementArray<'a>,
+    /// Static proof that a non-null Vertex Array is bound.
     pub vertex_array: &'a ActiveVertexArray<'a>,
-    pub framebuffer: &'a ActiveDrawFramebuffer<'a, Defaultness>,
+    /// Static proof that a Complete framebuffer is bound.
+    pub framebuffer: &'a ActiveDrawFramebuffer<'a, Default>,
+    /// Static proof that a successfully-linked program is bound.
     pub program: &'a ActiveProgram<'a>,
 }
 
@@ -69,12 +78,12 @@ pub struct Draw(pub(crate) NotSync);
 
 impl Draw {
     /// Draw vertices from the `VertexArray`, using its enabled attributes.
-    pub fn arrays<Defaultness>(
+    pub fn arrays<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         vertices: std::ops::Range<usize>,
         instances: usize,
-        _state: ArraysState<Defaultness>,
+        _state: ArraysState<Default>,
     ) {
         if vertices.start == vertices.end || instances == 0 {
             // Nothing to draw.
@@ -109,13 +118,13 @@ impl Draw {
     }
     /// Fetches the indices to draw from the bound `ElementBuffer`,
     /// and uses those to fetch to vertices from the `VertexArray`.
-    pub fn elements<Defaultness>(
+    pub fn elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         element_type: ElementType,
         elements: std::ops::Range<usize>,
         instances: usize,
-        _state: ElementsState<Defaultness>,
+        _state: ElementsState<Default>,
     ) {
         if elements.start == elements.end || instances == 0 {
             // Nothing to draw.
@@ -169,13 +178,13 @@ impl Draw {
     ///
     /// # Safety
     /// All index values in the range given by `elements` within `ElementBuffer` must be within `index_range`.
-    pub unsafe fn ranged_elements<Defaultness>(
+    pub unsafe fn ranged_elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         element_type: ElementType,
         elements: std::ops::Range<usize>,
         index_range: std::ops::RangeInclusive<usize>,
-        _state: ElementsState<Defaultness>,
+        _state: ElementsState<Default>,
     ) {
         if elements.start == elements.end {
             // Nothing to draw.

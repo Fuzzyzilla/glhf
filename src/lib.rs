@@ -21,6 +21,10 @@ pub mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
+// Users may need to name these explicitly if they're working with `unsafe`, or writing
+// functions that accept `Active` slots, re-export them in a slightly more accessible place.
+pub use slot::marker;
+
 pub mod buffer;
 pub mod draw;
 pub mod framebuffer;

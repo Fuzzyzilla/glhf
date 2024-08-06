@@ -109,6 +109,11 @@ pub enum AttributeType {
     /// Fetch as floats, access in shader as floats.
     Float(FloatingAttribute),
 }
+impl From<FloatingAttribute> for AttributeType {
+    fn from(value: FloatingAttribute) -> Self {
+        Self::Float(value)
+    }
+}
 impl AttributeType {
     /// Get the align requirements for fetching this attribute.
     pub fn align_of(&self) -> usize {
