@@ -3,10 +3,7 @@ use crate::{
         self,
         types::{GLchar, GLenum, GLint, GLsizei, GLuint},
     },
-    program::{
-        self, CompiledShader, EmptyShader, Fragment, LinkedProgram, Program, ProgramShaders, Type,
-        Vertex,
-    },
+    program::{self, CompiledShader, EmptyShader, LinkedProgram, Program, ProgramShaders, Type},
     slot::marker::{IsDefault, NotDefault, Unknown},
     NotSync, ThinGLObject,
 };
@@ -50,14 +47,14 @@ unsafe fn program_log(program: GLuint) -> std::ffi::CString {
 }
 
 #[derive(Debug)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 pub struct CompileError<Ty: Type> {
     pub shader: EmptyShader<Ty>,
     pub error: std::ffi::CString,
 }
 
 #[derive(Debug)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 pub struct LinkError {
     pub program: Program,
     pub error: std::ffi::CString,

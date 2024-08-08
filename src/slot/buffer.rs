@@ -2,7 +2,7 @@ use crate::{
     buffer::{usage, Buffer},
     gl,
     slot::marker::{IsDefault, NotDefault, Unknown},
-    GLEnum, GLenum, NotSync, ThinGLObject,
+    GLenum, NotSync, ThinGLObject,
 };
 
 /// Marker trait for the many buffer binding targets.
@@ -208,16 +208,7 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
         };
         // Max offset, exclusive.
         let right = match right {
-            Bound::Unbounded => unsafe {
-                // Query the size of the buffer.
-                let mut size = 0;
-                gl::GetBufferParameteri64v(
-                    Binding::TARGET,
-                    gl::BUFFER_SIZE,
-                    std::ptr::addr_of_mut!(size),
-                );
-                size.try_into().unwrap()
-            },
+            Bound::Unbounded => self.len(),
             Bound::Included(x) => x.checked_add(1).unwrap(),
             Bound::Excluded(x) => x,
         };
@@ -248,6 +239,47 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
             access: std::marker::PhantomData,
             ptr: ptr.cast(),
             len,
+        }
+    }
+    /// This is not cached and invokes a `glGet`.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Get the length of the buffer, in bytes.
+    ///
+    /// This is not cached and invokes a `glGet`.
+    pub fn len(&self) -> usize {
+        let len = unsafe {
+            let mut len = std::mem::MaybeUninit::uninit();
+            gl::GetBufferParameteri64v(Binding::TARGET, gl::BUFFER_SIZE, len.as_mut_ptr());
+            len.assume_init()
+        };
+        len.try_into().unwrap()
+    }
+    /// Get the usage hints used at the time of the datastore's allocation.
+    ///
+    /// This is not cached and invokes a `glGet`.
+    pub fn usage(&self) -> (usage::Frequency, usage::Access) {
+        use usage::{Access as A, Frequency as F};
+        let usage = unsafe {
+            let mut usage = std::mem::MaybeUninit::uninit();
+            gl::GetBufferParameteriv(Binding::TARGET, gl::BUFFER_USAGE, usage.as_mut_ptr());
+            usage.assume_init()
+        };
+        match usage as GLenum {
+            gl::STATIC_COPY => (F::Static, A::Copy),
+            gl::STATIC_DRAW => (F::Static, A::Draw),
+            gl::STATIC_READ => (F::Static, A::Read),
+
+            gl::STREAM_COPY => (F::Stream, A::Copy),
+            gl::STREAM_DRAW => (F::Stream, A::Draw),
+            gl::STREAM_READ => (F::Stream, A::Read),
+
+            gl::DYNAMIC_COPY => (F::Dynamic, A::Copy),
+            gl::DYNAMIC_DRAW => (F::Dynamic, A::Draw),
+            gl::DYNAMIC_READ => (F::Dynamic, A::Read),
+
+            _ => unreachable!(),
         }
     }
 }

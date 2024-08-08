@@ -1,5 +1,5 @@
 //! Owned textures and their properties.
-use super::{gl, GLenum, NonZero, NonZeroName};
+use super::{gl, GLenum, NonZeroName};
 
 /* /// The size and dimensionality of an image.
 enum Dimensionality {
@@ -370,7 +370,7 @@ unsafe impl crate::GLEnum for Wrap {}
 /// The type parameter, `Dim`, represents the kind of initialization. E.g., binding a [`Stateless`]
 /// texture to [`crate::slot::texture::Slot2D`] changes it into a `Texture<D2>`.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 pub struct Texture<Dim: Dimensionality>(
     pub(crate) NonZeroName,
     pub(crate) std::marker::PhantomData<Dim>,
@@ -387,7 +387,7 @@ pub type TextureCube = Texture<Cube>;
 /// An application-owned texture which does not currently have a dimensionality, properties,
 /// nor datastore. Bind it to a texture target in order to initialize the GL-internal datastructures.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 pub struct Stateless(pub(crate) NonZeroName);
 
 impl crate::sealed::Sealed for Stateless {}

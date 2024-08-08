@@ -1,5 +1,5 @@
 use crate::{
-    gl::{self, types::GLenum},
+    gl,
     slot::marker::{IsDefault, NotDefault, Unknown},
     vertex_array::{self, VertexArray},
     GLEnum, NotSync, ThinGLObject,

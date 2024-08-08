@@ -1,10 +1,7 @@
-use std::num::{NonZero, NonZeroU32};
-
-use glhf::{vertex_array, ThinGLObject};
+use glhf::vertex_array;
 use glutin::prelude::*;
 use ultraviolet::Vec3;
 
-use gl::types::{GLchar, GLenum, GLint, GLsizei, GLuint};
 use glhf::gl;
 
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -13,9 +10,8 @@ struct Vertex {
     pos: Vec3,
     normal: Vec3,
 }
-fn load_obj(mut read: impl std::io::BufRead) -> anyhow::Result<(Vec<Vertex>, Vec<u16>)> {
-    use std::io::{BufRead, Read};
-    let mut lines = read.lines();
+fn load_obj(read: impl std::io::BufRead) -> anyhow::Result<(Vec<Vertex>, Vec<u16>)> {
+    let lines = read.lines();
     // OBJ uses 1-based indices, but all the structures below
     // maintain zero-based indexing.
 
@@ -201,7 +197,6 @@ struct Window {
     window: winit::window::Window,
 
     program: glhf::program::LinkedProgram,
-    vertex_buffer: glhf::buffer::Buffer,
     index_buffer: glhf::buffer::Buffer,
     num_indices: usize,
     vao: glhf::vertex_array::VertexArray,
@@ -263,34 +258,23 @@ impl Window {
         .unwrap()
         .make_current(&surface)
         .unwrap();
+        let api = context.context_api();
+
+        println!("Got context {:?}", context.context_api());
+        assert!(
+            matches!(api, glutin::context::ContextApi::Gles(_)),
+            "GLHF is built for GLES!"
+        );
 
         // Load global proc addresses. This is only usable if there is ONE display in use for the lifetime of the program.
         gl::load_with(|sym| display.get_proc_address(&std::ffi::CString::new(sym).unwrap()));
 
-        println!("Got context {:?}", context.context_api());
-        unsafe {
-            let mut major = 0;
-            let mut minor = 0;
-            gl::GetIntegerv(gl::MAJOR_VERSION, std::ptr::addr_of_mut!(major));
-            Self::err();
-            gl::GetIntegerv(gl::MINOR_VERSION, std::ptr::addr_of_mut!(minor));
-            Self::err();
-            println!("Version: {major}.{minor}");
-            let mut workgroups = [0; 3];
-            for i in 0..3 {
-                gl::GetIntegeri_v(
-                    gl::MAX_COMPUTE_WORK_GROUP_SIZE,
-                    i,
-                    std::ptr::addr_of_mut!(workgroups[i as usize]),
-                );
-                Self::err();
-            }
-            println!("Workgroups: {workgroups:?}");
-        }
-
         let mut gl = unsafe { glhf::GLHF::current() };
+
+        // Compile the program used to draw the visual scene, sampling from the shadow mask
+        // and accepting direct lighting fron the sun.
         let program = {
-            let vertex = gl.create.shader::<glhf::program::Vertex>();
+            let vertex = gl.new.shader::<glhf::program::Vertex>();
             let vertex = gl
                 .program
                 .compile(
@@ -318,7 +302,7 @@ impl Window {
                 }",
                 )
                 .unwrap();
-            let fragment = gl.create.shader::<glhf::program::Fragment>();
+            let fragment = gl.new.shader::<glhf::program::Fragment>();
             let fragment = gl
                 .program
                 .compile(
@@ -348,7 +332,7 @@ impl Window {
                 )
                 .unwrap();
 
-            let program = gl.create.program();
+            let program = gl.new.program();
             let program = gl
                 .program
                 .link(
@@ -366,8 +350,9 @@ impl Window {
             program
         };
 
+        // Compile the program for use during the shadow pass.
         let shadow_program = {
-            let vertex = gl.create.shader::<glhf::program::Vertex>();
+            let vertex = gl.new.shader::<glhf::program::Vertex>();
             let vertex = gl
                 .program
                 .compile(
@@ -384,18 +369,22 @@ impl Window {
                 }",
                 )
                 .unwrap();
-            let fragment = gl.create.shader::<glhf::program::Fragment>();
+            let fragment = gl.new.shader::<glhf::program::Fragment>();
             let fragment = gl
                 .program
                 .compile(
                     fragment,
                     r"#version 310 es
+
+                    // Fragments need not do anything! Since we have no color buffers during
+                    // this pass, there is nothing to do here anyway.
+                    // However, unlike OpenGL, GLES requires that fragment shaders be present.
                     void main() {}
                     ",
                 )
                 .unwrap();
 
-            let program = gl.create.program();
+            let program = gl.new.program();
             let program = gl
                 .program
                 .link(
@@ -416,36 +405,50 @@ impl Window {
         // We've compiled all we need :3
         gl.hint.release_compiler();
 
-        let [shadow_texture] = gl.create.textures();
-        let [shadow_framebuffer] = gl.create.framebuffers();
+        // Setup a framebuffer to use for our shadow pass.
+        // We will render the scene from the sun's POV into a depth texture,
+        // which we can then use to sample from to determine which fragments are visible
+        // to the sun (and thus illuminated)
+        let [shadow_texture] = gl.new.textures();
+        let [shadow_framebuffer] = gl.new.framebuffers();
 
+        // Initialize the texture as 2D.
         let (shadow_texture, texture_slot) = gl.texture.d2.initialize(shadow_texture);
         texture_slot
+            // Give it a size and a format.
             .storage(
+                // Mip levels. We don't care about mipmapping here.
                 1.try_into().unwrap(),
                 glhf::texture::InternalFormat::DepthComponent16,
                 512.try_into().unwrap(),
                 512.try_into().unwrap(),
             )
-            // Enable `sampelr*Shadow` sampling
-            .compare_mode(Some(glhf::DepthCompareFunc::LessEqual))
-            // Enable PCF
+            // Enable `sampler*Shadow` sampling, which gives us a `true`/`false` lighting
+            // value in the shader as opposed to a raw depth reading.
+            .compare_mode(Some(glhf::state::CompareFunc::LessEqual))
+            // Enable PCF, this makes the shadows softer at some cost of memory bandwidth.
             .min_filter(glhf::texture::Filter::Linear, None)
             .mag_filter(glhf::texture::Filter::Linear);
 
         gl.framebuffer
             .draw
             .bind(&shadow_framebuffer)
+            // Bind our shadow texture as the depth map.
             .texture_2d(&shadow_texture, glhf::framebuffer::Attachment::Depth, 0)
             // No fragment outputs.
             .draw_buffers(&[]);
 
+        // Done specifying attachments, check with the GL to ensure the framebuffer
+        // specification is up-to-snuff.
         let (shadow_framebuffer, _) = gl
             .framebuffer
             .draw
             .try_complete(shadow_framebuffer)
             .unwrap();
 
+        // Set up uniforms for the camera and sun matrices.
+        // I was too lazy to set up any proper math for this, so it's just done by eye.
+        // Good luck.
         // Camera at +,+ looking roughly towards origin.
         let camera_matrix = {
             let proj = ultraviolet::projection::rh_yup::perspective_gl(
@@ -465,7 +468,7 @@ impl Window {
 
             proj * (rotate * translate)
         };
-        // Camera at light at 0,0 looking down.
+        // Sun "camera", off to the right of the main camera.
         // Lol, what a metal variable name.
         let shadow_matrix = {
             let proj =
@@ -484,7 +487,7 @@ impl Window {
             proj * funnier_rotate * (rotate * translate)
         };
 
-        // Convert ultraviolet matrices into GL matrices.
+        // Convert ultraviolet matrices into GLHF matrices.
         let camera_matrix = glhf::program::uniform::Mat4::from(
             camera_matrix.as_component_array().map(|v| *v.as_array()),
         );
@@ -493,63 +496,92 @@ impl Window {
         );
         Self::err();
 
+        // In our main program...
         gl.program
             .bind(&program)
+            // Bind the matrices we just calculated!
             .uniform_matrix(0, &camera_matrix)
+            // Note the location here - matrices take up many uniform slots.
             .uniform_matrix(4, &shadow_matrix)
-            // Bind texture unit 0
+            // Bind texture unit 0, where we'll put the shadow texture at
+            // draw time.
             .uniform(8, &0i32);
 
+        // The shadow program only needs the sun matrix.
         gl.program
             .bind(&shadow_program)
             .uniform_matrix(0, &shadow_matrix);
 
+        // Load a test scene.
         let (vertices, indices) =
-            load_obj(std::io::Cursor::new(include_bytes!("../test.obj"))).unwrap();
+            load_obj(std::io::Cursor::new(include_bytes!("test.obj"))).unwrap();
 
-        let [vertex_buffer, index_buffer] = gl.create.buffers();
+        // Generate unique buffer names.
+        let [vertex_buffer, index_buffer] = gl.new.buffers();
 
+        // Bulk upload our scene data
         let vbo = gl.buffer.array.bind(&vertex_buffer);
+        // Vertex arrays, containing both position and normals interleaved.
         vbo.data(
             bytemuck::cast_slice(&vertices),
             glhf::buffer::usage::Frequency::Static,
             glhf::buffer::usage::Access::Draw,
         );
+        // Index (or, in gl terms, "element") buffer.
         gl.buffer.element_array.bind(&index_buffer).data(
             bytemuck::cast_slice(&indices),
             glhf::buffer::usage::Frequency::Static,
             glhf::buffer::usage::Access::Draw,
         );
 
-        let [vao] = gl.create.vertex_arrays();
+        // Vertex arrays store references to (potentially many) "Array" buffers,
+        // specifying the layout of vertex attributes within them.
+        let [vao] = gl.new.vertex_arrays();
 
+        // Calculate the distance between consecutive attributes.
+        // (e.g., the distance from one `Vertex.pos` to the next.)
         let stride = std::mem::size_of::<Vertex>().try_into().unwrap();
+
+        // Set up the vertex specification.
         gl.vertex_array
             .bind(&vao)
             .attribute(
+                // Read from our vertex buffer,
                 &vbo,
+                // Vertex shader location zero,
                 0,
                 vertex_array::Attribute {
-                    ty: vertex_array::FloatingAttribute::F32.into(),
+                    // Is a vec3<f32>...
                     components: vertex_array::Components::Vec3,
+                    ty: vertex_array::FloatingAttribute::F32.into(),
+                    // Each value this many bytes apart...
                     stride: Some(stride),
+                    // Offset from the beginning of the buffer by...
                     offset: std::mem::offset_of!(Vertex, pos),
                 },
-                // Eagerly enable
+                // Enable fetching for this attribute.
                 Some(true),
             )
             .attribute(
+                // Again, for the normals.
                 &vbo,
                 1,
                 vertex_array::Attribute {
-                    ty: vertex_array::FloatingAttribute::F32.into(),
                     components: vertex_array::Components::Vec3,
+                    ty: vertex_array::FloatingAttribute::F32.into(),
                     stride: Some(stride),
+                    // Except this time the offset differs.
                     offset: std::mem::offset_of!(Vertex, normal),
                 },
-                // Eagerly enable
+                // Enable fetching for this attribute.
                 Some(true),
             );
+
+        // We don't need any cleanup, since all our resources last for the lifetime of the program.
+        // This here is actually a resource leak! Handles do not implement any kind of resource
+        // management. However, we don't need access to this handle anymore, as it's state is
+        // captured within the `vao`
+        drop(vertex_buffer);
 
         Self {
             context,
@@ -559,7 +591,6 @@ impl Window {
 
             num_indices: indices.len(),
             index_buffer,
-            vertex_buffer,
             vao,
 
             shadow_texture,
@@ -583,62 +614,85 @@ impl Window {
         }
     }
     fn redraw(&mut self) {
+        use glhf::state;
         let mut gl = unsafe { glhf::GLHF::current() };
-        unsafe {
-            gl::ClearColor(0.0, 0.5, 0.8, 1.0);
-            gl::ClearDepthf(1.0);
-            gl::Enable(gl::CULL_FACE);
-            gl::CullFace(gl::FRONT);
-            gl::Enable(gl::DEPTH_TEST);
-            gl::DepthFunc(gl::LESS);
-        }
+        gl.state
+            // A nice blue color
+            .clear_color([0.0, 0.5, 0.8, 1.0])
+            // Clear to 1.0 (max depth for our fixed-point zbuffer!)
+            .clear_depth(1.0)
+            // Cull the face that is towards the sun. This is a funny trick to
+            // reduce "shadow acne" at the cost of some "peter panning" (we graphics creatures love our jargon)
+            .cull_face(state::CullFace::Front)
+            .enable(state::Capability::CullFace)
+            // Pass fragments that are less far than the current zbuffer value
+            .depth_func(state::CompareFunc::Less)
+            .enable(state::Capability::DepthTest);
 
+        // Bind the index buffer and the vertex array, which contains references to our vertex buffer.
         let elements = gl.buffer.element_array.bind(&self.index_buffer);
         let vertex_array = gl.vertex_array.bind(&self.vao);
+        // Bind the shadow framebuffer and the shadow program.
         let framebuffer = gl.framebuffer.draw.bind_complete(&self.shadow_framebuffer);
-        framebuffer.clear(glhf::slot::framebuffer::AspectMask::all());
         let program = gl.program.bind(&self.shadow_program);
+        // Clear the depth buffer.
+        framebuffer.clear(glhf::slot::framebuffer::AspectMask::DEPTH);
 
+        // Provide static proof-of-state to the `draw.elements` call.
         let draw_info = glhf::draw::ElementState {
+            // We have an element buffer bound...
             elements: &elements,
+            // ...a complete framebuffer...
             framebuffer: &framebuffer,
+            // ...a linked program...
             program: &program,
+            // ...and a vertex array!
             vertex_array: &vertex_array,
         };
-        gl.draw.elements(
-            glhf::draw::Topology::Triangles,
-            glhf::draw::ElementType::U16,
-            0..self.num_indices,
-            1,
-            draw_info,
-        );
+        unsafe {
+            // Draw our indexed mesh.
+            gl.draw.elements(
+                glhf::draw::Topology::Triangles,
+                glhf::draw::ElementType::U16,
+                0..self.num_indices,
+                1,
+                draw_info,
+            )
+        };
 
+        // Switch to the "default" framebuffer, which is the window surface.
         let framebuffer = gl.framebuffer.draw.bind_default();
+        // Clear it and it's depth-bufffer.
         framebuffer.clear(glhf::slot::framebuffer::AspectMask::all());
 
+        // Use the program that samples our shadow mask and calculates lighting.
         let program = gl.program.bind(&self.program);
 
-        unsafe {
-            gl::CullFace(gl::BACK);
-            Self::err();
-        }
+        // Use a more traditional backface culling.
+        gl.state.cull_face(state::CullFace::Back);
 
+        // `program` is set up to read the shadow texture (rendered in the pass above) from slot 0,
+        // so ensure that texture is bound there.
         gl.texture.unit(0).d2.bind(&self.shadow_texture);
 
+        // And draw again!
         let draw_info = glhf::draw::ElementState {
             elements: &elements,
             framebuffer: &framebuffer,
             program: &program,
             vertex_array: &vertex_array,
         };
-        gl.draw.elements(
-            glhf::draw::Topology::Triangles,
-            glhf::draw::ElementType::U16,
-            0..self.num_indices,
-            1,
-            draw_info,
-        );
+        unsafe {
+            gl.draw.elements(
+                glhf::draw::Topology::Triangles,
+                glhf::draw::ElementType::U16,
+                0..self.num_indices,
+                1,
+                draw_info,
+            )
+        };
 
+        // Tell winit we're about to swap, and then show it to the user!
         self.window.pre_present_notify();
         self.surface.swap_buffers(&self.context).unwrap();
     }

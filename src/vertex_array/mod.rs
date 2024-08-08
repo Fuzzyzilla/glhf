@@ -153,7 +153,7 @@ pub struct Attribute {
 /// A vertex array provides offsets, sizes, and types for the attributes fetched by the
 /// vertex shader, and remembers the buffers bound at the moment of attribute declaration.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 pub struct VertexArray(pub(crate) NonZeroName);
 
 impl crate::sealed::Sealed for VertexArray {}

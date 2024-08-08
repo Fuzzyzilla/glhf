@@ -2,10 +2,11 @@
 
 use crate::{
     gl,
+    state::CompareFunc,
     texture::{
         Cube, D2Array, Dimensionality, Filter, InternalFormat, Stateless, Swizzle, Texture, D2, D3,
     },
-    DepthCompareFunc, GLEnum, GLenum, NonZero, NotSync,
+    GLEnum, GLenum, NonZero, NotSync,
 };
 
 /// Entry points for `glTex*`
@@ -52,7 +53,7 @@ impl<Dim: Dimensionality> Active<'_, Dim> {
         }
         self
     }
-    pub fn compare_mode(&self, mode: Option<DepthCompareFunc>) -> &Self {
+    pub fn compare_mode(&self, mode: Option<CompareFunc>) -> &Self {
         if let Some(mode) = mode {
             unsafe {
                 self.tex_parameter_enum(gl::TEXTURE_COMPARE_MODE, gl::COMPARE_REF_TO_TEXTURE);

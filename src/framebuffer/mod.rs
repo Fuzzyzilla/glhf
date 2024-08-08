@@ -1,4 +1,4 @@
-use super::{gl, GLenum, NonZeroName};
+use super::{gl, NonZeroName};
 
 /// Buffers available for reading and writing on user-created framebuffers.
 #[derive(PartialEq, Eq)]
@@ -46,7 +46,7 @@ unsafe impl crate::GLEnum for DefaultBuffer {}
 ///
 /// To make [`Complete`], use [`crate::slot::framebuffer::Slot::try_complete`].
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
 pub struct Incomplete(pub(crate) NonZeroName);
 impl crate::sealed::Sealed for Incomplete {}
@@ -56,7 +56,7 @@ unsafe impl crate::ThinGLObject for Incomplete {}
 
 /// A framebuffer that is known to be complete.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
 pub struct Complete(pub(crate) NonZeroName);
 impl crate::sealed::Sealed for Complete {}

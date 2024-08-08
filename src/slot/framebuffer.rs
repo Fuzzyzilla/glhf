@@ -276,7 +276,7 @@ impl Active<'_, Draw, IsDefault, Complete> {
 }
 
 #[derive(Debug)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 pub struct IncompleteError<'slot, Slot> {
     /// The activation token of the framebuffer. Even if it failed to pass completion,
     /// it is bound.
@@ -353,8 +353,7 @@ impl<T: Target> Slot<T> {
             Ok((
                 // Safety - we just checked, dummy!
                 unsafe { framebuffer.into_complete_unchecked() },
-                // Safety - from zst to zst. Chaging Active<T, NotDefault, Incomplete> to Active<T, NotDefault, Complete>.
-                unsafe { std::mem::transmute(active) },
+                Active(std::marker::PhantomData, std::marker::PhantomData),
             ))
         } else {
             Err(IncompleteError {

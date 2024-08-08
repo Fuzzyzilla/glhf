@@ -231,7 +231,7 @@ pub enum ProgramShaders<'a> {
 
 /// A shader which has no source code.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
 pub struct EmptyShader<Ty: Type>(pub(crate) NonZeroName, std::marker::PhantomData<Ty>);
 impl<Ty: Type> EmptyShader<Ty> {
@@ -252,7 +252,7 @@ unsafe impl<Ty: Type> crate::ThinGLObject for EmptyShader<Ty> {}
 
 /// A shader which has been successfully compiled.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
 pub struct CompiledShader<Ty: Type>(pub(crate) NonZeroName, std::marker::PhantomData<Ty>);
 
@@ -271,7 +271,7 @@ impl<Ty: Type> From<CompiledShader<Ty>> for EmptyShader<Ty> {
 
 /// A program which has not been linked.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
 pub struct Program(pub(crate) NonZeroName);
 impl Program {
@@ -292,7 +292,7 @@ unsafe impl crate::ThinGLObject for Program {}
 
 /// A program which has been successfully linked.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
 pub struct LinkedProgram(pub(crate) NonZeroName);
 

@@ -12,7 +12,6 @@ use crate::slot::{self, marker};
 
 type ActiveProgram<'a> = slot::program::Active<'a, marker::NotDefault>;
 type ActiveVertexArray<'a> = slot::vertex_array::Active<'a, marker::NotDefault>;
-type ActiveArray<'a> = slot::buffer::Active<'a, slot::buffer::Array, marker::NotDefault>;
 type ActiveElementArray<'a> =
     slot::buffer::Active<'a, slot::buffer::ElementArray, marker::NotDefault>;
 type ActiveDrawFramebuffer<'a, Defaultness> = slot::framebuffer::Active<
@@ -85,7 +84,11 @@ pub struct Draw(pub(crate) NotSync);
 impl Draw {
     /// Draw consecutive vertices from the [vertex array](ArrayState::vertex_array),
     /// using its enabled buffers and attributes.
-    pub fn arrays<Default: marker::Defaultness>(
+    ///
+    /// # Safety
+    /// * For each enabled vertex attribute, vertex fetching must not extend out-of-bounds
+    ///   for their given buffers.
+    pub unsafe fn arrays<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         vertices: std::ops::Range<usize>,
@@ -125,7 +128,12 @@ impl Draw {
     }
     /// Fetches the indices to draw from the bound [element buffer](ElementState::elements),
     /// and uses those to fetch to vertices from the [vertex array](ElementState::vertex_array).
-    pub fn elements<Default: marker::Defaultness>(
+    ///
+    /// # Safety
+    /// * The index range must not read beyond the end of the element array.
+    /// * For each enabled vertex attribute, vertex fetching by index must not extend out-of-bounds
+    ///   for their given buffers.
+    pub unsafe fn elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         element_type: ElementType,
@@ -144,6 +152,16 @@ impl Draw {
             .expect("draw range end before start");
 
         let byte_offset = elements.start.checked_mul(element_type.size_of()).unwrap();
+
+        #[cfg(debug_assertions)]
+        {
+            // Check index buffer bounds.
+            let len = _state.elements.len();
+            debug_assert!(
+                (byte_offset + count.checked_mul(element_type.size_of()).unwrap()) <= len,
+                "unsafe precondition violated: draw.elements() element range out of bounds"
+            )
+        }
 
         if instances == 1 {
             // AFAIK, treating instances == 1 as a regular draw is not observably different
@@ -180,7 +198,10 @@ impl Draw {
     /// minimal unused indices.
     ///
     /// # Safety
-    /// All index values in the range given by `elements` within the element buffer must be within `index_range`.
+    /// * The index range must not read beyond the end of the element array.
+    /// * All index values in the range given by `elements` within the element buffer must be within `index_range`.
+    /// * For each enabled vertex attribute, vertex fetching by index must not extend out-of-bounds
+    ///   for their given buffers.
     pub unsafe fn ranged_elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
@@ -200,6 +221,16 @@ impl Draw {
             .expect("draw range end before start");
 
         let byte_offset = elements.start.checked_mul(element_type.size_of()).unwrap();
+
+        #[cfg(debug_assertions)]
+        {
+            // Check index buffer bounds.
+            let len = _state.elements.len();
+            debug_assert!(
+                (byte_offset + count.checked_mul(element_type.size_of()).unwrap()) <= len,
+                "unsafe precondition violated: draw.ranged_elements() element range out of bounds"
+            )
+        }
 
         // (why is there no Instanced form?)
         unsafe {

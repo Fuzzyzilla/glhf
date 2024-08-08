@@ -1,4 +1,4 @@
-use crate::{gl, GLEnum, GLenum, NonZeroName};
+use crate::{gl, GLenum, NonZeroName};
 
 /// Hints to the GL as to how often and in what way a buffer will be used.
 ///
@@ -112,7 +112,7 @@ bitflags::bitflags! {
 /// An application-owned memory buffer. Buffers simply represent a list of bytes,
 /// who's interpretation is based wholly on the slot the buffer is bound to.
 #[repr(transparent)]
-#[must_use = "dropping a gl handle leaks memory"]
+#[must_use = "dropping a gl handle leaks resources"]
 pub struct Buffer(pub(crate) NonZeroName);
 
 impl crate::sealed::Sealed for Buffer {}

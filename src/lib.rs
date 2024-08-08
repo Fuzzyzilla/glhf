@@ -12,7 +12,7 @@
 //! management - it is simply a projection of the OpenGL ownership hierarchy to the rust type
 //! system.
 
-use gl::types::{GLchar, GLenum, GLint, GLsizei, GLuint};
+use gl::types::{GLenum, GLsizei, GLuint};
 use std::num::NonZero;
 type NonZeroName = NonZero<GLuint>;
 
@@ -28,95 +28,13 @@ pub use slot::marker;
 pub mod buffer;
 pub mod draw;
 pub mod framebuffer;
+pub mod hint;
+pub mod new;
 pub mod program;
 pub mod slot;
+pub mod state;
 pub mod texture;
 pub mod vertex_array;
-
-#[repr(u32)]
-pub enum DepthCompareFunc {
-    LessEqual = gl::LEQUAL,
-    GreaterEqual = gl::GEQUAL,
-    Less = gl::LESS,
-    Greater = gl::GREATER,
-    Equal = gl::EQUAL,
-    NotEqual = gl::NOTEQUAL,
-    Always = gl::ALWAYS,
-    Never = gl::NEVER,
-}
-// Safety: is repr(u32) enum.
-unsafe impl crate::GLEnum for DepthCompareFunc {}
-
-/// Entry points for allocating and deallocating GL objects, wrapping `glGen*`.
-///
-/// It is generally more efficientto allocate many resources at the same time.
-///
-/// Some stateless objects can be deallocated through this interface. For stateful objects -
-/// e.g., [`texture::Texture2D`] - use their relavant [Slot](`slot`) to
-/// destroy them.
-///
-/// Usage:
-/// ```no_run
-/// # let gl : glhf::GLHF = todo!();
-/// let [one_texture] = gl.create.textures();
-/// let [a, bunch, of, framebuffers] = gl.create.framebuffers();
-/// ```
-// Interestingly, many `glGen*`s are *optional* - you can just make up a number
-// and use it. We intentionally don't support this usecase.
-pub struct Create(NotSync);
-impl Create {
-    /// Generate a set of new texture objects.
-    pub fn textures<const N: usize>(&self) -> [texture::Stateless; N] {
-        unsafe { gl_gen_with(gl::GenTextures) }
-    }
-    /// Delete stateless textures. To delete stateful textures, use the relevant [`slot::texture`] interface.
-    pub fn delete_textures<const N: usize>(&self, textures: [texture::Stateless; N]) {
-        unsafe { gl_delete_with(gl::DeleteTextures, textures) }
-    }
-    /// Generate a set of new framebuffer objects.
-    pub fn framebuffers<const N: usize>(&self) -> [framebuffer::Incomplete; N] {
-        unsafe { gl_gen_with(gl::GenFramebuffers) }
-    }
-    /// Generate a set of new framebuffer objects.
-    pub fn vertex_arrays<const N: usize>(&self) -> [vertex_array::VertexArray; N] {
-        unsafe { gl_gen_with(gl::GenVertexArrays) }
-    }
-    /// Generate a set of new buffer objects.
-    pub fn buffers<const N: usize>(&self) -> [buffer::Buffer; N] {
-        unsafe { gl_gen_with(gl::GenBuffers) }
-    }
-    /// Initialize a shader object of the given type.
-    pub fn shader<Ty: program::Type>(&self) -> program::EmptyShader<Ty> {
-        let value = unsafe { gl::CreateShader(Ty::TYPE) };
-        let name: NonZeroName = value
-            .try_into()
-            .expect("internal gl error while creating shader");
-
-        // Safety: Precondition of ThinGLOject.
-        unsafe { std::mem::transmute(name) }
-    }
-    /// Initialize a program object.
-    pub fn program(&self) -> program::Program {
-        let value = unsafe { gl::CreateProgram() };
-        let name: NonZeroName = value
-            .try_into()
-            .expect("internal gl error while creating program");
-
-        // Safety: Precondition of ThinGLOject.
-        unsafe { std::mem::transmute(name) }
-    }
-}
-
-pub struct Hint(NotSync);
-impl Hint {
-    /// Hint to the GL that you won't be compiling more shaders or programs.
-    ///
-    /// It is still valid to issue compilation and linking calls after this,
-    /// but there may be a significant performance penalty.
-    pub fn release_compiler(&self) {
-        unsafe { gl::ReleaseShaderCompiler() }
-    }
-}
 
 /// Entry point for GL calls.
 // That's not what we're doing, clippy!
@@ -131,11 +49,15 @@ pub struct GLHF {
     /// `glBindVertexArray`
     pub vertex_array: slot::vertex_array::Slot,
     /// `glGen*`
-    pub create: Create,
+    pub new: new::New,
     /// `glUseProgram`
     pub program: slot::program::Slot,
+    /// `glDraw*`
     pub draw: draw::Draw,
-    pub hint: Hint,
+    /// `glHint` and miscellaneous implementation hints.
+    pub hint: hint::Hint,
+    /// Miscellaneous global state, such as clear values, blend modes, etc.
+    pub state: state::State,
     _cant_destructure: (),
 }
 impl GLHF {
@@ -179,10 +101,11 @@ impl GLHF {
                 uniform: buffer::Slot(PhantomData, PhantomData),
             },
             vertex_array: vertex_array::Slot(PhantomData),
-            create: Create(PhantomData),
+            new: new::New(PhantomData),
             program: program::Slot(PhantomData),
-            hint: Hint(PhantomData),
+            hint: hint::Hint(PhantomData),
             draw: draw::Draw(PhantomData),
+            state: state::State(PhantomData),
             _cant_destructure: (),
         }
     }
@@ -193,7 +116,7 @@ mod sealed {
 }
 
 /// # Safety
-/// * A pointer to `self` must be safely writable and writable as `NonZero<GLuint>`.
+/// * A pointer to `self` must be safely readable and writable as `NonZero<GLuint>`.
 /// * A value of `NonZero<GLuint>` is a fully-initialized value of `self`.
 pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
     /// Fetch the "name" of the object, the unique ID used to interact with the GL.
@@ -205,6 +128,7 @@ pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
         unsafe { *std::ptr::from_ref(self).cast() }
     }
     /// Export the GLuint name, losing the typestate.
+    #[must_use = "dropping a gl handle leaks resources"]
     fn into_name(self) -> NonZeroName {
         // Safety - the user can't thrash the type state, since they are
         // moving the name out of the type state system.
