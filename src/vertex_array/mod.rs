@@ -148,10 +148,10 @@ pub struct Attribute {
     pub offset: usize,
 }
 
-/// VAO.
-/// A vertex array remembers the state of buffers bound at the same time as it,
-/// and provides offsets, sizes, and types for the attributes fetched by the
-/// vertex shader.
+/// User-defined vertex array.
+///
+/// A vertex array provides offsets, sizes, and types for the attributes fetched by the
+/// vertex shader, and remembers the buffers bound at the moment of attribute declaration.
 #[repr(transparent)]
 #[must_use = "dropping a gl handle leaks memory"]
 pub struct VertexArray(pub(crate) NonZeroName);

@@ -11,7 +11,9 @@ use crate::{
 // instead treat object 0 as null.
 
 impl Active<'_, NotDefault> {
-    /// Set the properties of a vertex attribute slot.
+    /// Set the properties of a vertex attribute slot. The source buffer is remembered
+    /// internally, and does not need to be active at time of draw.
+    ///
     /// See [`vertex_array::Attribute`].
     ///
     /// `enable` is provided as a convinience - if set to Some, will enable or disable
@@ -19,6 +21,7 @@ impl Active<'_, NotDefault> {
     /// effectively inheriting the previous state. By default, attributes are disabled.
     pub fn attribute(
         &self,
+        _source: &super::buffer::Active<'_, super::buffer::Array, NotDefault>,
         index: u32,
         attribute: vertex_array::Attribute,
         enable: Option<bool>,

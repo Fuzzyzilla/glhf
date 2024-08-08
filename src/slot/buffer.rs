@@ -11,11 +11,12 @@ pub trait Target: crate::sealed::Sealed {
 }
 
 macro_rules! target {
-    (pub struct $marker:ident = $value:ident) => {
+    (pub struct $marker:ident = $value:ident$(,$doc:literal)?) => {
         // This doc comment does not work with RA, but does at doc-build. weird.
         #[doc = "Marker for `"]
         #[doc = stringify!($value)]
-        #[doc = "`"]
+        #[doc = "`."]
+        $(#[doc = concat!(" ", $doc)])?
         #[derive(Debug)]
         pub struct $marker;
         impl crate::sealed::Sealed for $marker {}
@@ -25,13 +26,34 @@ macro_rules! target {
     };
 }
 
-target!(pub struct Array = ARRAY_BUFFER);
-target!(pub struct CopyRead = COPY_READ_BUFFER);
-target!(pub struct CopyWrite = COPY_WRITE_BUFFER);
-target!(pub struct ElementArray = ELEMENT_ARRAY_BUFFER);
-target!(pub struct PixelPack = PIXEL_PACK_BUFFER);
-target!(pub struct PixelUnpack = PIXEL_UNPACK_BUFFER);
-target!(pub struct TransformFeedback = TRANSFORM_FEEDBACK_BUFFER);
+target!(
+    pub struct Array = ARRAY_BUFFER,
+    "Source for arbitrary vertex data when attached to a [`VertexArray`](crate::vertex_array::VertexArray) attribute."
+);
+target!(
+    pub struct CopyRead = COPY_READ_BUFFER,
+    "Scratch buffer for copy operations without disturbing other bindings."
+);
+target!(
+    pub struct CopyWrite = COPY_WRITE_BUFFER,
+    "Scratch buffer for copy operations without disturbing other bindings."
+);
+target!(
+    pub struct ElementArray = ELEMENT_ARRAY_BUFFER,
+    "Source for vertex indices when executing a [`Draw::elements`](crate::draw::Draw::elements) operation."
+);
+target!(
+    pub struct PixelPack = PIXEL_PACK_BUFFER,
+    "Destination for image downloads."
+);
+target!(
+    pub struct PixelUnpack = PIXEL_UNPACK_BUFFER,
+    "Source for image uploads."
+);
+target!(
+    pub struct TransformFeedback = TRANSFORM_FEEDBACK_BUFFER,
+    "Destination for vertex shader output feedback."
+);
 target!(pub struct Uniform = UNIFORM_BUFFER);
 
 /// Marker trait for the many buffer targets.

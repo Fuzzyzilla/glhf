@@ -47,10 +47,18 @@ pub enum ElementType {
 // Safety: is repr(u32) enum.
 unsafe impl GLEnum for ElementType {}
 
+impl ElementType {
+    pub fn size_of(&self) -> usize {
+        match self {
+            Self::U8 => std::mem::size_of::<u8>(),
+            Self::U16 => std::mem::size_of::<u16>(),
+            Self::U32 => std::mem::size_of::<u32>(),
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
-pub struct ArraysState<'a, Default: marker::Defaultness> {
-    /// Static proof that a non-zero Array Buffer is bound.
-    pub array: &'a ActiveArray<'a>,
+pub struct ArrayState<'a, Default: marker::Defaultness> {
     /// Static proof that a non-null Vertex Array is bound.
     pub vertex_array: &'a ActiveVertexArray<'a>,
     /// Static proof that a Complete framebuffer is bound.
@@ -60,9 +68,7 @@ pub struct ArraysState<'a, Default: marker::Defaultness> {
 }
 
 #[derive(Copy, Clone)]
-pub struct ElementsState<'a, Default: marker::Defaultness> {
-    /// Static proof that a non-zero Array Buffer is bound.
-    pub array: &'a ActiveArray<'a>,
+pub struct ElementState<'a, Default: marker::Defaultness> {
     /// Static proof that a non-null Element Array is bound.
     pub elements: &'a ActiveElementArray<'a>,
     /// Static proof that a non-null Vertex Array is bound.
@@ -77,13 +83,14 @@ pub struct ElementsState<'a, Default: marker::Defaultness> {
 pub struct Draw(pub(crate) NotSync);
 
 impl Draw {
-    /// Draw vertices from the `VertexArray`, using its enabled attributes.
+    /// Draw consecutive vertices from the [vertex array](ArrayState::vertex_array),
+    /// using its enabled buffers and attributes.
     pub fn arrays<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         vertices: std::ops::Range<usize>,
         instances: usize,
-        _state: ArraysState<Default>,
+        _state: ArrayState<Default>,
     ) {
         if vertices.start == vertices.end || instances == 0 {
             // Nothing to draw.
@@ -116,15 +123,15 @@ impl Draw {
             }
         }
     }
-    /// Fetches the indices to draw from the bound `ElementBuffer`,
-    /// and uses those to fetch to vertices from the `VertexArray`.
+    /// Fetches the indices to draw from the bound [element buffer](ElementState::elements),
+    /// and uses those to fetch to vertices from the [vertex array](ElementState::vertex_array).
     pub fn elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         element_type: ElementType,
         elements: std::ops::Range<usize>,
         instances: usize,
-        _state: ElementsState<Default>,
+        _state: ElementState<Default>,
     ) {
         if elements.start == elements.end || instances == 0 {
             // Nothing to draw.
@@ -136,12 +143,7 @@ impl Draw {
             .checked_sub(elements.start)
             .expect("draw range end before start");
 
-        let byte_offset = count
-            * match element_type {
-                ElementType::U8 => std::mem::size_of::<u8>(),
-                ElementType::U16 => std::mem::size_of::<u16>(),
-                ElementType::U32 => std::mem::size_of::<u32>(),
-            };
+        let byte_offset = elements.start.checked_mul(element_type.size_of()).unwrap();
 
         if instances == 1 {
             // AFAIK, treating instances == 1 as a regular draw is not observably different
@@ -169,22 +171,23 @@ impl Draw {
             }
         }
     }
-    /// Fetches the indices to draw from the bound `ElementBuffer`,
-    /// and uses those to fetch to vertices from the `VertexArray`,
+    /// Fetches the indices to draw from the bound [element buffer](ElementState::elements),
+    /// and uses those to fetch to vertices from the [vertex array](ElementState::vertex_array),
     /// additionally assuming that the indices fetched lie within `index_range`.
     ///
     /// This allows the implementation to perform optimized memory prefetching and
-    /// ahead-of-time computation.
+    /// ahead-of-time computation. For maximum performance, the range should be as small as possible with
+    /// minimal unused indices.
     ///
     /// # Safety
-    /// All index values in the range given by `elements` within `ElementBuffer` must be within `index_range`.
+    /// All index values in the range given by `elements` within the element buffer must be within `index_range`.
     pub unsafe fn ranged_elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         element_type: ElementType,
         elements: std::ops::Range<usize>,
         index_range: std::ops::RangeInclusive<usize>,
-        _state: ElementsState<Default>,
+        _state: ElementState<Default>,
     ) {
         if elements.start == elements.end {
             // Nothing to draw.
@@ -196,12 +199,7 @@ impl Draw {
             .checked_sub(elements.start)
             .expect("draw range end before start");
 
-        let byte_offset = count
-            * match element_type {
-                ElementType::U8 => std::mem::size_of::<u8>(),
-                ElementType::U16 => std::mem::size_of::<u16>(),
-                ElementType::U32 => std::mem::size_of::<u32>(),
-            };
+        let byte_offset = elements.start.checked_mul(element_type.size_of()).unwrap();
 
         // (why is there no Instanced form?)
         unsafe {

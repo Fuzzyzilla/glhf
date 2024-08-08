@@ -509,7 +509,8 @@ impl Window {
 
         let [vertex_buffer, index_buffer] = gl.create.buffers();
 
-        gl.buffer.array.bind(&vertex_buffer).data(
+        let vbo = gl.buffer.array.bind(&vertex_buffer);
+        vbo.data(
             bytemuck::cast_slice(&vertices),
             glhf::buffer::usage::Frequency::Static,
             glhf::buffer::usage::Access::Draw,
@@ -526,6 +527,7 @@ impl Window {
         gl.vertex_array
             .bind(&vao)
             .attribute(
+                &vbo,
                 0,
                 vertex_array::Attribute {
                     ty: vertex_array::FloatingAttribute::F32.into(),
@@ -537,6 +539,7 @@ impl Window {
                 Some(true),
             )
             .attribute(
+                &vbo,
                 1,
                 vertex_array::Attribute {
                     ty: vertex_array::FloatingAttribute::F32.into(),
@@ -590,15 +593,13 @@ impl Window {
             gl::DepthFunc(gl::LESS);
         }
 
-        let array = gl.buffer.array.bind(&self.vertex_buffer);
         let elements = gl.buffer.element_array.bind(&self.index_buffer);
         let vertex_array = gl.vertex_array.bind(&self.vao);
         let framebuffer = gl.framebuffer.draw.bind_complete(&self.shadow_framebuffer);
         framebuffer.clear(glhf::slot::framebuffer::AspectMask::all());
         let program = gl.program.bind(&self.shadow_program);
 
-        let draw_info = glhf::draw::ElementsState {
-            array: &array,
+        let draw_info = glhf::draw::ElementState {
             elements: &elements,
             framebuffer: &framebuffer,
             program: &program,
@@ -624,8 +625,7 @@ impl Window {
 
         gl.texture.unit(0).d2.bind(&self.shadow_texture);
 
-        let draw_info = glhf::draw::ElementsState {
-            array: &array,
+        let draw_info = glhf::draw::ElementState {
             elements: &elements,
             framebuffer: &framebuffer,
             program: &program,
