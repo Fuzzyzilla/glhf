@@ -65,6 +65,31 @@ impl Active<'_, NotDefault> {
     /// The value may only be an array if it was declared as an array within the shader.
     ///
     /// The number of uniform locations consumed is given by `value.slots()`
+    #[doc(alias = "glUniform")]
+    #[doc(alias = "glUniform1f")]
+    #[doc(alias = "glUniform2f")]
+    #[doc(alias = "glUniform3f")]
+    #[doc(alias = "glUniform4f")]
+    #[doc(alias = "glUniform1i")]
+    #[doc(alias = "glUniform2i")]
+    #[doc(alias = "glUniform3i")]
+    #[doc(alias = "glUniform4i")]
+    #[doc(alias = "glUniform1ui")]
+    #[doc(alias = "glUniform2ui")]
+    #[doc(alias = "glUniform3ui")]
+    #[doc(alias = "glUniform4ui")]
+    #[doc(alias = "glUniform1fv")]
+    #[doc(alias = "glUniform2fv")]
+    #[doc(alias = "glUniform3fv")]
+    #[doc(alias = "glUniform4fv")]
+    #[doc(alias = "glUniform1iv")]
+    #[doc(alias = "glUniform2iv")]
+    #[doc(alias = "glUniform3iv")]
+    #[doc(alias = "glUniform4iv")]
+    #[doc(alias = "glUniform1uiv")]
+    #[doc(alias = "glUniform2uiv")]
+    #[doc(alias = "glUniform3uiv")]
+    #[doc(alias = "glUniform4uiv")]
     pub fn uniform<
         'tiny,
         T: program::uniform::Value,
@@ -88,49 +113,49 @@ impl Active<'_, NotDefault> {
         match value {
             Vector::Scalar(s) => match T::TYPE {
                 Ty::F32 => unsafe {
-                    gl::Uniform1fv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform1fv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::I32 => unsafe {
-                    gl::Uniform1iv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform1iv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::U32 => unsafe {
-                    gl::Uniform1uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform1uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
             },
 
             Vector::Vec2(s) => match T::TYPE {
                 Ty::F32 => unsafe {
-                    gl::Uniform2fv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform2fv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::I32 => unsafe {
-                    gl::Uniform2iv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform2iv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::U32 => unsafe {
-                    gl::Uniform2uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform2uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
             },
 
             Vector::Vec3(s) => match T::TYPE {
                 Ty::F32 => unsafe {
-                    gl::Uniform3fv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform3fv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::I32 => unsafe {
-                    gl::Uniform3iv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform3iv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::U32 => unsafe {
-                    gl::Uniform3uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform3uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
             },
 
             Vector::Vec4(s) => match T::TYPE {
                 Ty::F32 => unsafe {
-                    gl::Uniform4fv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform4fv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::I32 => unsafe {
-                    gl::Uniform4iv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform4iv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
                 Ty::U32 => unsafe {
-                    gl::Uniform4uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast())
+                    gl::Uniform4uiv(location, s.len().try_into().unwrap(), s.as_ptr().cast());
                 },
             },
         }
@@ -140,6 +165,17 @@ impl Active<'_, NotDefault> {
     /// The value may only be an array if it was declared as an array within the shader.
     ///
     /// The number of uniform locations consumed is given by `value.slots()`
+    #[doc(alias = "glUniform")]
+    #[doc(alias = "glUniformMatrix")]
+    #[doc(alias = "glUniformMatrix2fv")]
+    #[doc(alias = "glUniformMatrix3fv")]
+    #[doc(alias = "glUniformMatrix4fv")]
+    #[doc(alias = "glUniformMatrix2x3fv")]
+    #[doc(alias = "glUniformMatrix3x2fv")]
+    #[doc(alias = "glUniformMatrix2x4fv")]
+    #[doc(alias = "glUniformMatrix4x2fv")]
+    #[doc(alias = "glUniformMatrix3x4fv")]
+    #[doc(alias = "glUniformMatrix4x3fv")]
     pub fn uniform_matrix<'tiny>(
         &self,
         base_location: u32,
@@ -162,7 +198,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
             Matrix::Mat3(s) => unsafe {
                 gl::UniformMatrix3fv(
@@ -170,7 +206,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
             Matrix::Mat4(s) => unsafe {
                 gl::UniformMatrix4fv(
@@ -178,7 +214,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
             Matrix::Mat2x3(s) => unsafe {
                 gl::UniformMatrix2x3fv(
@@ -186,7 +222,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
             Matrix::Mat2x4(s) => unsafe {
                 gl::UniformMatrix2x4fv(
@@ -194,7 +230,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
             Matrix::Mat3x2(s) => unsafe {
                 gl::UniformMatrix3x2fv(
@@ -202,7 +238,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
             Matrix::Mat3x4(s) => unsafe {
                 gl::UniformMatrix3x4fv(
@@ -210,7 +246,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
             Matrix::Mat4x3(s) => unsafe {
                 gl::UniformMatrix4x3fv(
@@ -218,7 +254,7 @@ impl Active<'_, NotDefault> {
                     s.len().try_into().unwrap(),
                     gl::FALSE,
                     s.as_ptr().cast(),
-                )
+                );
             },
         }
         self
@@ -233,6 +269,7 @@ pub struct Active<'slot, Kind>(
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// `glUse` a linked program.
+    #[doc(alias = "glUseProgram")]
     pub fn bind(&mut self, program: &LinkedProgram) -> Active<NotDefault> {
         unsafe {
             gl::UseProgram(program.name().get());
@@ -240,6 +277,7 @@ impl Slot {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Make the used program slot empty.
+    #[doc(alias = "glUseProgram")]
     pub fn unbind(&mut self) -> Active<IsDefault> {
         unsafe {
             gl::UseProgram(0);
@@ -248,6 +286,8 @@ impl Slot {
     }
     /// Set the GLSL ES source code of a shader, then attempt to compile it.
     // Is there a usecase for allowing each step of this process manually...?
+    #[doc(alias = "glShaderSource")]
+    #[doc(alias = "glCompileShader")]
     pub fn compile<Ty: Type>(
         &self,
         shader: EmptyShader<Ty>,
@@ -282,6 +322,8 @@ impl Slot {
     }
     /// Link together several compiled shaders into a [`LinkedProgram`]
     // Is there a usecase for allowing each step of this process manually...?
+    #[doc(alias = "glLinkProgram")]
+    #[doc(alias = "glAttachShader")]
     pub fn link(
         &self,
         program: Program,
@@ -319,7 +361,8 @@ impl Slot {
     }
     /// Inherit the currently bound program - this may be no program at all.
     ///
-    /// Most functionality is limited when the status of the program (Empty or NotEmpty) is not known.
+    /// Most functionality is limited when the status of the program (`Empty` or `NotEmpty`) is not known.
+    #[must_use]
     pub fn inherit(&self) -> Active<Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
@@ -330,6 +373,7 @@ impl Slot {
     // Unlike most deletion functions, this one takes shared ref self - DeleteProgram
     // defers the deletion until another program is bound, weirdly enough, and thus
     // does not invalidate outstanding `Active` markers.
+    #[doc(alias = "glDeleteProgram")]
     pub fn delete(&self, program: Program) {
         unsafe { gl::DeleteProgram(program.into_name().get()) }
     }
@@ -337,6 +381,7 @@ impl Slot {
     /// and will be deleted at the moment it is no longer attached to any program.
     ///
     /// To delete a [`CompiledShader`], use [`Into::into`].
+    #[doc(alias = "glDeleteShader")]
     pub fn delete_shader<Ty: Type>(&self, shader: EmptyShader<Ty>) {
         unsafe { gl::DeleteShader(shader.into_name().get()) }
     }

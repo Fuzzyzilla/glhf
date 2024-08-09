@@ -1,5 +1,6 @@
 use super::{gl, GLEnum, NotSync};
 
+#[derive(Copy, Clone)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -12,6 +13,7 @@ impl From<[f32; 4]> for Color {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct ColorMask {
     pub r: bool,
     pub g: bool,
@@ -35,6 +37,7 @@ impl From<bool> for ColorMask {
 }
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum CompareFunc {
     LessEqual = gl::LEQUAL,
     GreaterEqual = gl::GEQUAL,
@@ -49,6 +52,7 @@ pub enum CompareFunc {
 unsafe impl crate::GLEnum for CompareFunc {}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum CullFace {
     Front = gl::FRONT,
     Back = gl::BACK,
@@ -60,6 +64,7 @@ pub enum CullFace {
 unsafe impl crate::GLEnum for CullFace {}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum FrontFace {
     Clockwise = gl::CW,
     CounterClockwise = gl::CCW,
@@ -68,6 +73,7 @@ pub enum FrontFace {
 unsafe impl crate::GLEnum for FrontFace {}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum BlendEquation {
     /// `(src * factor) + (dst * factor)`
     Add = gl::FUNC_ADD,
@@ -84,6 +90,7 @@ pub enum BlendEquation {
 unsafe impl crate::GLEnum for BlendEquation {}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum BlendFactor {
     Zero = gl::ZERO,
     One = gl::ONE,
@@ -108,12 +115,14 @@ pub enum BlendFactor {
 // Safety: is repr(u32) enum.
 unsafe impl crate::GLEnum for BlendFactor {}
 
+#[derive(Copy, Clone)]
 pub struct BlendFunc {
     src_factor: BlendFactor,
     dst_factor: BlendFactor,
 }
 
 /// Arguments to `gl{Enable, Disable}`.
+#[derive(Copy, Clone)]
 #[repr(u32)]
 pub enum Capability {
     /// Blending using the user-defined blend equation and factors. If disabled,
@@ -169,6 +178,7 @@ pub enum Capability {
 unsafe impl crate::GLEnum for Capability {}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum StencilOp {
     Keep = gl::KEEP,
     Zero = gl::ZERO,
@@ -191,6 +201,7 @@ pub struct State(pub(crate) NotSync);
 impl State {
     /// Set the blend constant. Values are not clamped at a global level, but
     /// are clamped during blending when the destination buffer is an unsigned fixed-point format.
+    #[doc(alias = "glBlendColor")]
     pub fn blend_color(&self, color: impl Into<Color>) -> &Self {
         let color = color.into();
         unsafe {
@@ -201,6 +212,8 @@ impl State {
     /// Set the function used to combine source and destination colors.
     /// If `alpha_equation` is Some, separate equations are used for RGB and A. Otherwise, `equation`
     /// is used for all components.
+    #[doc(alias = "glBlendEquation")]
+    #[doc(alias = "glBlendEquationSeparate")]
     pub fn blend_equation(
         &self,
         equation: BlendEquation,
@@ -221,6 +234,8 @@ impl State {
     /// being combined in the blend equation.
     /// If `alpha_func` is Some, separate factors are used for RGB and A. Otherwise, `func`
     /// is used for all components.
+    #[doc(alias = "glBlendFunc")]
+    #[doc(alias = "glBlendFuncSeparate")]
     pub fn blend_func(&self, func: BlendFunc, alpha_func: Option<BlendFunc>) -> &Self {
         if let Some(alpha_func) = alpha_func {
             unsafe {
@@ -239,6 +254,7 @@ impl State {
         self
     }
     /// What color value to clear color buffers to in a `glClear`.
+    #[doc(alias = "glClearColor")]
     pub fn clear_color(&self, color: impl Into<Color>) -> &Self {
         let color = color.into();
         unsafe {
@@ -247,6 +263,7 @@ impl State {
         self
     }
     /// What floating point value to clear the depth buffer to in a `glClear`.
+    #[doc(alias = "glClearDepth")]
     pub fn clear_depth(&self, depth: f32) -> &Self {
         unsafe {
             gl::ClearDepthf(depth);
@@ -254,6 +271,7 @@ impl State {
         self
     }
     /// What bit value to clear the stencil buffer to in a `glClear`.
+    #[doc(alias = "glClearStencil")]
     pub fn clear_stencil(&self, stencil: u32) -> &Self {
         unsafe {
             // it's an unsigned value but C apis are allergic to uint i think
@@ -266,6 +284,7 @@ impl State {
     ///
     /// This effects `Clear` commands.
     // Todo: is this a framebuffer or global up?
+    #[doc(alias = "glColorMask")]
     pub fn color_mask(&self, write: impl Into<ColorMask>) -> &Self {
         let write = write.into();
         unsafe {
@@ -280,6 +299,7 @@ impl State {
         self
     }
     /// Which polygon faces to cull when [`Capability::CullFace`] is enabled
+    #[doc(alias = "glCullFace")]
     pub fn cull_face(&self, face: CullFace) -> &Self {
         unsafe {
             gl::CullFace(face.as_gl());
@@ -287,6 +307,7 @@ impl State {
         self
     }
     /// The function used to check a fragment's depth against the depth buffer.
+    #[doc(alias = "glDepthFunc")]
     pub fn depth_func(&self, func: CompareFunc) -> &Self {
         unsafe {
             gl::DepthFunc(func.as_gl());
@@ -296,6 +317,7 @@ impl State {
     /// Whether fragments that pass the fragment test should write to the depth buffer.
     ///
     /// This effects `Clear` commands.
+    #[doc(alias = "glDepthMask")]
     pub fn depth_mask(&self, write: bool) -> &Self {
         unsafe {
             gl::DepthMask(write.into());
@@ -304,13 +326,15 @@ impl State {
     }
     /// Defines a linear mapping from [-1, 1] NDC space to `range` in depth map space.
     /// Range may be reversed, i.e. `1.0..=-1.0` is a valid range.
-    pub fn depth_rangef(&self, range: std::ops::RangeInclusive<f32>) -> &Self {
+    #[doc(alias = "glDepthRangef")]
+    pub fn depth_range(&self, range: std::ops::RangeInclusive<f32>) -> &Self {
         unsafe {
             gl::DepthRangef(*range.start(), *range.end());
         }
         self
     }
     /// Disable a capability. See [`Capability`] for info.
+    #[doc(alias = "glDisable")]
     pub fn disable(&self, capability: Capability) -> &Self {
         unsafe {
             gl::Disable(capability.as_gl());
@@ -318,6 +342,7 @@ impl State {
         self
     }
     /// Enable a capability. See [`Capability`] for info.
+    #[doc(alias = "glEnable")]
     pub fn enable(&self, capability: Capability) -> &Self {
         unsafe {
             gl::Enable(capability.as_gl());
@@ -325,24 +350,28 @@ impl State {
         self
     }
     /// Defines what winding order, in framebuffer space, is consindered the "front" of a polygon.
+    #[doc(alias = "glFrontFace")]
     pub fn front_face(&self, winding: FrontFace) -> &Self {
         unsafe {
             gl::FrontFace(winding.as_gl());
         }
         self
     }
+    #[doc(alias = "glLineWidth")]
     pub fn line_width(&self, width: f32) -> &Self {
         unsafe {
             gl::LineWidth(width);
         }
         self
     }
+    #[doc(alias = "glPolygonOffset")]
     pub fn polygon_offset(&self, factor: f32, units: f32) -> &Self {
         unsafe {
             gl::PolygonOffset(factor, units);
         }
         self
     }
+    #[doc(alias = "glSampleCoverage")]
     pub fn sample_coverage(&self, value: f32, invert: bool) -> &Self {
         unsafe {
             gl::SampleCoverage(value, invert.into());
@@ -352,6 +381,7 @@ impl State {
     /// Specify the scissor rectangle for scissor testing, if enabled.
     ///
     /// `min` is the lower-left.
+    #[doc(alias = "glScissor")]
     pub fn scissor(&self, min: [u32; 2], size: [u32; 2]) -> &Self {
         unsafe {
             gl::Scissor(
@@ -367,6 +397,7 @@ impl State {
     ///
     /// For example, if func is [`CompareFunc::GreaterEqual`], the check is
     /// `(reference & mask) >= (stencil & mask)`
+    #[doc(alias = "glStencilFunc")]
     pub fn stencil_func(&self, func: CompareFunc, reference: u32, mask: u32) -> &Self {
         unsafe {
             gl::StencilFunc(func.as_gl(), reference as _, mask);
@@ -378,6 +409,7 @@ impl State {
     /// it is read-only.
     ///
     /// This affects `Clear` commands.
+    #[doc(alias = "glStencilMask")]
     pub fn stencil_mask(&self, mask: u32) -> &Self {
         unsafe {
             gl::StencilMask(mask as _);
@@ -386,6 +418,7 @@ impl State {
     }
     /// Specify the modifications to make to the stencil buffer when the stencil
     /// test fails, the depth test fails, or neither test fails, respectively.
+    #[doc(alias = "glStencilOp")]
     pub fn stencil_op(
         &self,
         stencil_fail: StencilOp,
@@ -401,6 +434,7 @@ impl State {
     /// The vertex x and y output ranges of `[-1, 1]` are mapped onto this rectangle.
     ///
     /// `min` is the lower-left.
+    #[doc(alias = "glViewport")]
     pub fn viewport(&self, min: [u32; 2], size: [u32; 2]) -> &Self {
         unsafe {
             gl::Viewport(

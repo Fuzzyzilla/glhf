@@ -8,7 +8,7 @@ use crate::{
 /// It is generally more efficientto allocate many resources at the same time.
 ///
 /// Some stateless objects can be deallocated through this interface. For stateful objects -
-/// e.g., [`texture::Texture2D`] - use their relavant [Slot](`slot`) to
+/// e.g., [`texture::Texture2D`] - use their relavant [Slot](`crate::slot`) to
 /// destroy them.
 ///
 /// Usage:
@@ -22,26 +22,35 @@ use crate::{
 pub struct New(pub(crate) NotSync);
 impl New {
     /// Generate a set of new texture objects.
+    #[doc(alias = "glGenTextures")]
     pub fn textures<const N: usize>(&self) -> [texture::Stateless; N] {
         unsafe { gl_gen_with(gl::GenTextures) }
     }
-    /// Delete stateless textures. To delete stateful textures, use the relevant [`slot::texture`] interface.
+    /// Delete stateless textures. To delete stateful textures, use the relavent
+    /// [`slot::texture::Slot`](crate::slot::texture::Slot::delete) interface.
+    #[doc(alias = "glDeleteTextures")]
     pub fn delete_textures<const N: usize>(&self, textures: [texture::Stateless; N]) {
         unsafe { gl_delete_with(gl::DeleteTextures, textures) }
     }
     /// Generate a set of new framebuffer objects.
+    #[doc(alias = "glGenFramebuffers")]
     pub fn framebuffers<const N: usize>(&self) -> [framebuffer::Incomplete; N] {
         unsafe { gl_gen_with(gl::GenFramebuffers) }
     }
     /// Generate a set of new framebuffer objects.
+    #[doc(alias = "glGenVertexArrays")]
     pub fn vertex_arrays<const N: usize>(&self) -> [vertex_array::VertexArray; N] {
         unsafe { gl_gen_with(gl::GenVertexArrays) }
     }
     /// Generate a set of new buffer objects.
+    #[doc(alias = "glGenBuffers")]
     pub fn buffers<const N: usize>(&self) -> [buffer::Buffer; N] {
         unsafe { gl_gen_with(gl::GenBuffers) }
     }
     /// Initialize a shader object of the given type.
+    /// # Panics
+    /// On GL-internal error.
+    #[doc(alias = "glCreateShader")]
     pub fn shader<Ty: program::Type>(&self) -> program::EmptyShader<Ty> {
         let value = unsafe { gl::CreateShader(Ty::TYPE) };
         let name: NonZeroName = value
@@ -52,6 +61,9 @@ impl New {
         unsafe { std::mem::transmute(name) }
     }
     /// Initialize a program object.
+    /// # Panics
+    /// On GL-internal error.
+    #[doc(alias = "glCreateProgram")]
     pub fn program(&self) -> program::Program {
         let value = unsafe { gl::CreateProgram() };
         let name: NonZeroName = value

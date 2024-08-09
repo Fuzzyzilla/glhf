@@ -28,6 +28,7 @@ pub mod usage {
         Copy,
     }
     /// Combine a frequency and access into the corresponding `GLenum`.
+    #[must_use]
     pub fn as_gl(frequency: Frequency, access: Access) -> super::GLenum {
         use super::gl;
         use Access as A;

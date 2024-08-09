@@ -36,7 +36,7 @@ pub enum Topology {
 // Safety: is repr(u32) enum.
 unsafe impl GLEnum for Topology {}
 
-/// Specifies the datatype of indices to fetch from the ElementArray.
+/// Specifies the datatype of indices to fetch from the `ElementArray`.
 #[repr(u32)]
 pub enum ElementType {
     U8 = gl::UNSIGNED_BYTE,
@@ -47,6 +47,7 @@ pub enum ElementType {
 unsafe impl GLEnum for ElementType {}
 
 impl ElementType {
+    #[must_use]
     pub fn size_of(&self) -> usize {
         match self {
             Self::U8 => std::mem::size_of::<u8>(),
@@ -88,6 +89,8 @@ impl Draw {
     /// # Safety
     /// * For each enabled vertex attribute, vertex fetching must not extend out-of-bounds
     ///   for their given buffers.
+    #[doc(alias = "glDrawArrays")]
+    #[doc(alias = "glDrawArraysInstanced")]
     pub unsafe fn arrays<Default: marker::Defaultness>(
         &self,
         mode: Topology,
@@ -133,13 +136,15 @@ impl Draw {
     /// * The index range must not read beyond the end of the element array.
     /// * For each enabled vertex attribute, vertex fetching by index must not extend out-of-bounds
     ///   for their given buffers.
+    #[doc(alias = "glDrawElements")]
+    #[doc(alias = "glDrawElementsInstanced")]
     pub unsafe fn elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         element_type: ElementType,
         elements: std::ops::Range<usize>,
         instances: usize,
-        _state: ElementState<Default>,
+        state: ElementState<Default>,
     ) {
         if elements.start == elements.end || instances == 0 {
             // Nothing to draw.
@@ -156,11 +161,11 @@ impl Draw {
         #[cfg(debug_assertions)]
         {
             // Check index buffer bounds.
-            let len = _state.elements.len();
-            debug_assert!(
+            let len = state.elements.len();
+            assert!(
                 (byte_offset + count.checked_mul(element_type.size_of()).unwrap()) <= len,
                 "unsafe precondition violated: draw.elements() element range out of bounds"
-            )
+            );
         }
 
         if instances == 1 {
@@ -185,7 +190,7 @@ impl Draw {
                     element_type.as_gl(),
                     byte_offset as _,
                     instances.try_into().unwrap(),
-                )
+                );
             }
         }
     }
@@ -202,13 +207,14 @@ impl Draw {
     /// * All index values in the range given by `elements` within the element buffer must be within `index_range`.
     /// * For each enabled vertex attribute, vertex fetching by index must not extend out-of-bounds
     ///   for their given buffers.
+    #[doc(alias = "glDrawRangeElements")]
     pub unsafe fn ranged_elements<Default: marker::Defaultness>(
         &self,
         mode: Topology,
         element_type: ElementType,
         elements: std::ops::Range<usize>,
         index_range: std::ops::RangeInclusive<usize>,
-        _state: ElementState<Default>,
+        state: ElementState<Default>,
     ) {
         if elements.start == elements.end {
             // Nothing to draw.
@@ -225,11 +231,11 @@ impl Draw {
         #[cfg(debug_assertions)]
         {
             // Check index buffer bounds.
-            let len = _state.elements.len();
-            debug_assert!(
+            let len = state.elements.len();
+            assert!(
                 (byte_offset + count.checked_mul(element_type.size_of()).unwrap()) <= len,
                 "unsafe precondition violated: draw.ranged_elements() element range out of bounds"
-            )
+            );
         }
 
         // (why is there no Instanced form?)

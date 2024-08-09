@@ -58,7 +58,7 @@ target!(pub struct Uniform = UNIFORM_BUFFER);
 
 /// Marker trait for the many buffer targets.
 /// # Safety
-/// `FLAGS` should must contain `MAP_READ_BIT and optionally `MAP_WRITE_BIT`, and no others.
+/// `FLAGS` should must contain `MAP_READ_BIT` and optionally `MAP_WRITE_BIT`, and no others.
 pub unsafe trait MapAccess: crate::sealed::Sealed {
     const FLAGS: gl::types::GLbitfield;
 }
@@ -83,7 +83,7 @@ unsafe impl MapAccess for ReadWrite {
 /// memory is unmapped when this object is dropped.
 ///
 /// This type dereferences to a (possibly mutable) byte slice.
-pub struct BufferMapGuard<'active, 'slot: 'active, Binding: Target, Access: MapAccess> {
+pub struct MapGuard<'active, 'slot: 'active, Binding: Target, Access: MapAccess> {
     // We hold it the slot and buffer mutably, as it is an error to use the buffer for any operation
     // until it is unmapped. Holding it this way also ensures that Self::drop has safe access
     // to gl calls due to safety precondition of `crate::GLHF`.
@@ -93,9 +93,7 @@ pub struct BufferMapGuard<'active, 'slot: 'active, Binding: Target, Access: MapA
     len: usize,
 }
 
-impl<Binding: Target, Access: MapAccess> std::ops::Deref
-    for BufferMapGuard<'_, '_, Binding, Access>
-{
+impl<Binding: Target, Access: MapAccess> std::ops::Deref for MapGuard<'_, '_, Binding, Access> {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
@@ -103,14 +101,14 @@ impl<Binding: Target, Access: MapAccess> std::ops::Deref
         unsafe { std::slice::from_raw_parts(self.ptr.cast_const(), self.len) }
     }
 }
-impl<Binding: Target> std::ops::DerefMut for BufferMapGuard<'_, '_, Binding, ReadWrite> {
+impl<Binding: Target> std::ops::DerefMut for MapGuard<'_, '_, Binding, ReadWrite> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
         // Align is one.
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
-impl<Binding: Target, Access: MapAccess> Drop for BufferMapGuard<'_, '_, Binding, Access> {
+impl<Binding: Target, Access: MapAccess> Drop for MapGuard<'_, '_, Binding, Access> {
     fn drop(&mut self) {
         unsafe {
             // Does raise errors, AFAIKT,
@@ -130,6 +128,7 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
     // FIXME: The reference has verbage about the alignment of the buffer, and that
     // it must be properly aligned to the datatype of the buffer but... Well,, what
     // type?!?!? https://registry.khronos.org/OpenGL-Refpages/es3.0/
+    #[doc(alias = "glBufferData")]
     pub fn data(&self, data: &[u8], frequency: usage::Frequency, access: usage::Access) -> &Self {
         unsafe {
             gl::BufferData(
@@ -146,6 +145,7 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
     /// # Safety
     /// Host or GL read accesses on uninitialized memory is undefined behavior, ensure the
     /// buffer gets overwritten before any reads can take place.
+    #[doc(alias = "glBufferData")]
     pub unsafe fn data_uninit(
         &self,
         len: usize,
@@ -165,6 +165,7 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
     }
     /// Ovwerite a sub-range of the data store.
     // FIXME: same alignment confusion as `Self::data`.
+    #[doc(alias = "glBufferSubData")]
     pub fn sub_data(&self, offset: usize, data: &[u8]) -> &Self {
         unsafe {
             gl::BufferSubData(
@@ -191,12 +192,14 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
     ///     .fill(10u8);
     /// ```
     /// # Panics
-    /// If the range end is before the beginning.
+    /// If the range end is before the beginning, or if mapping failed
     // FIXME: same alignment confusion as `Self::data`.
+    #[doc(alias = "glMapBuffer")]
+    #[doc(alias = "glMapBufferRange")]
     pub fn map<'this, Access: MapAccess>(
         &'this mut self,
         range: impl std::ops::RangeBounds<usize>,
-    ) -> BufferMapGuard<'this, 'slot, Binding, Access> {
+    ) -> MapGuard<'this, 'slot, Binding, Access> {
         use std::ops::Bound;
         let left = range.start_bound().cloned();
         let right = range.end_bound().cloned();
@@ -222,7 +225,7 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
         &'this mut self,
         offset: usize,
         len: usize,
-    ) -> BufferMapGuard<'this, 'slot, Binding, Access> {
+    ) -> MapGuard<'this, 'slot, Binding, Access> {
         let ptr = unsafe {
             gl::MapBufferRange(
                 Binding::TARGET,
@@ -231,10 +234,8 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
                 Access::FLAGS,
             )
         };
-        if ptr.is_null() {
-            panic!("Map failed.");
-        }
-        BufferMapGuard {
+        assert!(!ptr.is_null());
+        MapGuard {
             _active: self,
             access: std::marker::PhantomData,
             ptr: ptr.cast(),
@@ -242,12 +243,18 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
         }
     }
     /// This is not cached and invokes a `glGet`.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
     /// Get the length of the buffer, in bytes.
     ///
     /// This is not cached and invokes a `glGet`.
+    #[doc(alias = "glGetBufferParameter")]
+    #[doc(alias = "glGetBufferParameteriv")]
+    #[doc(alias = "glGetBufferParameteri64v")]
+    #[doc(alias = "GL_BUFFER_SIZE")]
+    #[must_use]
     pub fn len(&self) -> usize {
         let len = unsafe {
             let mut len = std::mem::MaybeUninit::uninit();
@@ -259,6 +266,10 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
     /// Get the usage hints used at the time of the datastore's allocation.
     ///
     /// This is not cached and invokes a `glGet`.
+    #[doc(alias = "glGetBufferParameter")]
+    #[doc(alias = "glGetBufferParameteriv")]
+    #[doc(alias = "GL_BUFFER_USAGE")]
+    #[must_use]
     pub fn usage(&self) -> (usage::Frequency, usage::Access) {
         use usage::{Access as A, Frequency as F};
         let usage = unsafe {
@@ -290,6 +301,7 @@ pub struct Slot<Binding: Target>(
 );
 impl<Binding: Target> Slot<Binding> {
     /// Bind a buffer to this slot.
+    #[doc(alias = "glBindBuffer")]
     pub fn bind(&mut self, buffer: &Buffer) -> Active<Binding, NotDefault> {
         unsafe {
             gl::BindBuffer(Binding::TARGET, buffer.name().get());
@@ -297,6 +309,7 @@ impl<Binding: Target> Slot<Binding> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Make the slot empty.
+    #[doc(alias = "glBindBuffer")]
     pub fn unbind(&mut self) -> Active<Binding, IsDefault> {
         unsafe {
             gl::BindBuffer(Binding::TARGET, 0);
@@ -305,7 +318,8 @@ impl<Binding: Target> Slot<Binding> {
     }
     /// Inherit the currently bound buffer - this may be no buffer at all.
     ///
-    /// Most functionality is limited when the status of the buffer (Empty or NotEmpty) is not known.
+    /// Most functionality is limited when the status of the buffer (`Default` or `NotDefault`) is not known.
+    #[must_use]
     pub fn inherit(&self) -> Active<Binding, Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
@@ -323,6 +337,7 @@ pub struct Slots {
 }
 impl Slots {
     /// Delete buffers. If any were bound to a slot, the slot becomes unbound.
+    #[doc(alias = "glDeleteBuffers")]
     pub fn delete<const N: usize>(&mut self, buffers: [Buffer; N]) {
         unsafe { crate::gl_delete_with(gl::DeleteBuffers, buffers) }
     }

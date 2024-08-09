@@ -30,6 +30,7 @@ pub enum IntegerAttribute {
 }
 impl IntegerAttribute {
     /// Get the align requirements for fetching this attribute.
+    #[must_use]
     pub fn align_of(&self) -> usize {
         match self {
             Self::U8 => std::mem::align_of::<u8>(),
@@ -57,6 +58,7 @@ pub enum FloatingAttribute {
 }
 impl FloatingAttribute {
     /// Get the align requirements for fetching this attribute.
+    #[must_use]
     pub fn align_of(&self) -> usize {
         match self {
             Self::F16 => std::mem::align_of::<u16>(),
@@ -81,6 +83,7 @@ pub enum PackedIntegerAttribute {
 }
 impl PackedIntegerAttribute {
     /// Get the align requirements for fetching this attribute.
+    #[must_use]
     pub fn align_of(&self) -> usize {
         match self {
             Self::IReverse2_10_10_10 | Self::UReverse2_10_10_10 => std::mem::align_of::<u32>(),
@@ -116,6 +119,7 @@ impl From<FloatingAttribute> for AttributeType {
 }
 impl AttributeType {
     /// Get the align requirements for fetching this attribute.
+    #[must_use]
     pub fn align_of(&self) -> usize {
         match self {
             AttributeType::Float(ty) => ty.align_of(),

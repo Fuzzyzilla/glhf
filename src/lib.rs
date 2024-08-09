@@ -11,12 +11,27 @@
 //! This is not an object-oriented approach, nor does it aim to implement automatic resource
 //! management - it is simply a projection of the OpenGL ownership hierarchy to the rust type
 //! system.
+//!
+//! ## Doc Aliases
+//! Unfortunately the design requirements of this crate required that causes functionality be
+//! spread out across many namespaces. This crate makes use of `#[doc(alias = ...)]` to allow
+//! searching the docs for a GL API. Currently, the full name must be typed **exactly**,
+//! case-sensitive, including the `gl`/`GL` prefix.
+//!
+//! For `glGet*` and `gl*Parameter*`, search by the GL `pname` parameter - for example
+//! `GL_BUFFER_SIZE` will find [`slot::buffer::Active::len`].
+//!
+//! For other functions, search by the GL function name - for example, `glActiveTexture` will
+//! find [`slot::texture::Slots::unit`].
+
+#![warn(rustdoc::all)]
 
 use gl::types::{GLenum, GLsizei, GLuint};
 use std::num::NonZero;
 type NonZeroName = NonZero<GLuint>;
 
 pub mod gl {
+    #![doc(hidden)]
     #![allow(clippy::all)]
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
@@ -74,6 +89,7 @@ impl GLHF {
     /// * There must be no other Self object representing the this context.
     /// * If multiple `Self` objects exist, it is invalid to use objects derived from one's context
     ///   in methods on another one's context.
+    #[must_use]
     pub unsafe fn current() -> Self {
         use slot::{buffer, framebuffer, program, texture, vertex_array};
         use std::marker::PhantomData;
@@ -127,7 +143,7 @@ pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
         // Safety - the trait precondition!
         unsafe { *std::ptr::from_ref(self).cast() }
     }
-    /// Export the GLuint name, losing the typestate.
+    /// Export the `GLuint` name, losing the typestate.
     #[must_use = "dropping a gl handle leaks resources"]
     fn into_name(self) -> NonZeroName {
         // Safety - the user can't thrash the type state, since they are
@@ -138,12 +154,12 @@ pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
     }
 }
 
-/// Trait for rusty GLenums.
+/// Trait for rusty `GLenum`s.
 ///
 /// # Safety
 /// * Must be implemented only on enums.
 /// * The enum must be `#[repr(u32)]`
-/// * Every variant must be a correct constant of GLenum.
+/// * Every variant must be a correct constant of `GLenum`.
 pub unsafe trait GLEnum {
     /// Access the raw `GLenum` value of this enum.
     fn as_gl(&self) -> GLenum {
@@ -169,9 +185,10 @@ unsafe fn gl_gen_with<const N: usize, T: ThinGLObject>(
     #[cfg(debug_assertions)]
     {
         let names = std::mem::transmute_copy::<_, std::mem::MaybeUninit<[GLuint; N]>>(&names);
-        if names.assume_init().into_iter().any(|name| name == 0) {
-            panic!("gl returned a zeroed texture name, UB abounds.")
-        }
+        assert!(
+            !names.assume_init().into_iter().any(|name| name == 0),
+            "gl returned a zeroed texture name, UB abounds."
+        );
     }
 
     names.assume_init()

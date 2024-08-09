@@ -32,7 +32,7 @@ enum Dimensionality {
 }*/
 
 /// # Safety
-/// TARGET must be one of GL_TEXTURE_{2D, 3D, 2D_ARRAY, CUBE_MAP}
+/// TARGET must be one of `GL_TEXTURE_{2D, 3D, 2D_ARRAY, CUBE_MAP}`
 pub unsafe trait Dimensionality: crate::sealed::Sealed {
     const TARGET: GLenum;
 }
@@ -58,6 +58,7 @@ unsafe impl Dimensionality for Cube {
 }
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum InternalFormat {
     // Unsized color formats, i.e. the GL is allowed to chose any size it pleases.
     RGB = gl::RGB,
@@ -127,10 +128,11 @@ pub enum InternalFormat {
 // Safety: is repr(u32) enum.
 unsafe impl crate::GLEnum for InternalFormat {}
 impl InternalFormat {
-    /// Get the "format" GLenum associated with this internal format.
+    /// Get the "format" `GLenum` associated with this internal format.
     /// This describes the layout of pixel data in a buffer.
     ///
     /// This is *not* the same as `self.as_gl`
+    #[must_use]
     pub fn format(&self) -> Format {
         match self {
             Self::RGB => Format::RGB,
@@ -202,6 +204,7 @@ impl InternalFormat {
 }
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum Format {
     Alpha = gl::ALPHA,
     Luminance = gl::LUMINANCE,
@@ -223,6 +226,7 @@ pub enum Format {
 unsafe impl crate::GLEnum for Format {}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum ImageData<'data> {
     U8(&'data [u8]) = gl::UNSIGNED_BYTE,
     I8(&'data [i8]) = gl::BYTE,
@@ -257,6 +261,7 @@ pub struct F32Reverse24_8 {
 unsafe impl crate::GLEnum for ImageData<'_> {}
 
 impl ImageData<'_> {
+    #[must_use]
     pub fn compatible_with_internal_format(&self, format: InternalFormat) -> bool {
         // Implement big table seen at https://registry.khronos.org/OpenGL-Refpages/es3.0/
         match format {
@@ -340,6 +345,7 @@ impl ImageData<'_> {
 }
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum Swizzle {
     Red = gl::RED,
     Green = gl::GREEN,
@@ -350,13 +356,17 @@ pub enum Swizzle {
 }
 // Safety: is repr(u32) enum.
 unsafe impl crate::GLEnum for Swizzle {}
+
+#[derive(Copy, Clone)]
 pub enum Filter {
     Nearest,
     /// For Color images, enables linear filtering.
     /// For Depth images, enables Percentage-Closer Filtering
     Linear,
 }
+
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum Wrap {
     ClampToEdge = gl::CLAMP_TO_EDGE,
     MirroredRepeat = gl::MIRRORED_REPEAT,

@@ -78,6 +78,7 @@ pub struct Active<'slot, Slot, Default: Defaultness, Completeness>(
 );
 
 impl<T: Target> Active<'_, T, NotDefault, Incomplete> {
+    #[doc(alias = "glFramebufferTexture2D")]
     pub fn texture_2d(&self, texture: &Texture2D, attachment: Attachment, mip_level: u32) -> &Self {
         unsafe {
             gl::FramebufferTexture2D(
@@ -101,6 +102,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Draw, AnyDefaultness, Complete> {
     /// # Safety
     /// If the read buffer and any of the draw buffers refer to the same resource and the source
     /// and destination rectangles overlap, behavior is undefined.
+    #[doc(alias = "glBlitFramebuffer")]
     pub unsafe fn blit_from<OtherDefaultness: Defaultness>(
         &self,
         _from: &Active<Read, OtherDefaultness, Complete>,
@@ -134,6 +136,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Draw, AnyDefaultness, Complete> {
     /// Affected color buffers are limited to those selected by [`Self::draw_buffers`].
     ///
     /// The clear values are inherited from the global values `ClearColor`, `ClearDepth`, and `ClearStencil`.
+    #[doc(alias = "glClear")]
     pub fn clear(&self, mask: AspectMask) -> &Self {
         if mask.is_empty() {
             return self;
@@ -150,6 +153,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     /// This is the reverse of [Active<'_, Draw, OtherDefaultness, Complete>::blit_from],
     /// see that function for more information.
     #[allow(clippy::missing_safety_doc)]
+    #[doc(alias = "glBlitFramebuffer")]
     pub unsafe fn blit_to<OtherDefaultness: Defaultness>(
         &self,
         other: &Active<'_, Draw, OtherDefaultness, Complete>,
@@ -169,6 +173,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     /// If the source range extends beyond the extent of the current `read_buffer`, the values
     /// transferred from those texels are undefined. This is *not* immediate UB, but it would
     /// be UB for any read access to those values in the destination texture.
+    #[doc(alias = "glCopyTexSubImage2D")]
     pub unsafe fn copy_subimage_to(
         &self,
         _to: &crate::slot::texture::Active<'_, crate::texture::D2>,
@@ -204,6 +209,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     /// If the source range extends beyond the extent of the current `read_buffer`, the values
     /// transferred from those texels are undefined. This is *not* immediate UB, but it would
     /// be UB for any read access to those values in the destination texture.
+    #[doc(alias = "glCopyTexImage2D")]
     pub unsafe fn copy_image_to(
         &self,
         _to: &crate::slot::texture::Active<'_, crate::texture::D2>,
@@ -234,9 +240,11 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
 impl<AnyCompleteness> Active<'_, Draw, NotDefault, AnyCompleteness> {
     /// Direct fragment outputs into appropriate buffers.
     /// I.e., Fragment output 0 will go into the buffer defined by `buffers[0]`.
-    /// If the slice is too short, remaining slots default to [`DrawBuffers::None`]
+    /// If the slice is too short, remaining slots default to [`Buffer::None`]
     ///
+    /// # Panics
     /// Every element of `buffers` must be either none or a unique value.
+    #[doc(alias = "glDrawBuffers")]
     pub fn draw_buffers(&self, buffers: &[Buffer]) -> &Self {
         assert!(is_all_unique(buffers));
         // Cast safety: Fieldless repr(u32), can be safely reinterpreted as &[u32]
@@ -248,9 +256,11 @@ impl<AnyCompleteness> Active<'_, Draw, NotDefault, AnyCompleteness> {
 impl Active<'_, Draw, IsDefault, Complete> {
     /// Direct fragment outputs into appropriate buffers.
     /// I.e., Fragment output 0 will go into the buffer defined by `buffers[0]`.
-    /// If the slice is too short, remaining slots default to [`DrawBuffers::None`]
+    /// If the slice is too short, remaining slots default to [`DefaultBuffer::None`]
     ///
+    /// # Panics
     /// Every element of `buffers` must be either none or a unique value.
+    #[doc(alias = "glDrawBuffers")]
     pub fn draw_buffers(&self, buffers: &[DefaultBuffer]) -> &Self {
         assert!(is_all_unique(buffers));
         // Cast safety: Fieldless repr(u32), can be safely reinterpreted as &[u32]
@@ -261,6 +271,7 @@ impl Active<'_, Draw, IsDefault, Complete> {
 
 impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
     /// Set the source for pixel read operations.
+    #[doc(alias = "glReadBuffer")]
     pub fn read_buffer(&self, buffer: Buffer) -> &Self {
         unsafe { gl::ReadBuffer(buffer.as_gl()) }
         self
@@ -269,6 +280,7 @@ impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
 
 impl Active<'_, Draw, IsDefault, Complete> {
     /// Set the source for pixel read operations.
+    #[doc(alias = "glReadBuffer")]
     pub fn read_buffer(&self, buffer: DefaultBuffer) -> &Self {
         unsafe { gl::ReadBuffer(buffer.as_gl()) }
         self
@@ -305,12 +317,13 @@ pub enum IncompleteErrorKind {
     Multisample = gl::FRAMEBUFFER_INCOMPLETE_MULTISAMPLE,
     /// Either of:
     /// * Some attachments are layered while others are not.
-    /// * Not all Texture attachments are from the same target (i.e., some are Texture2D and some are TextureCube)
+    /// * Not all Texture attachments are from the same target (i.e., some are `Texture2D` and some are `TextureCube`)
     //    ^^^^ Can we prevent this second one statically? perhaps...
     LayerTargets = gl::FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS,
     // Dimensions is a defined error, which makes sense, but it is not mentioned in the GLES3.X spec?
 }
 impl IncompleteErrorKind {
+    #[must_use]
     pub fn from_gl(gl: GLenum) -> Self {
         match gl {
             gl::FRAMEBUFFER_INCOMPLETE_ATTACHMENT => Self::Attachment,
@@ -326,6 +339,7 @@ impl IncompleteErrorKind {
 pub struct Slot<T: Target>(pub(crate) NotSync, pub(crate) std::marker::PhantomData<T>);
 impl<T: Target> Slot<T> {
     /// Bind a user-defined framebuffer to this slot.
+    #[doc(alias = "glBindFramebuffer")]
     pub fn bind(&mut self, framebuffer: &Incomplete) -> Active<T, NotDefault, Incomplete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, framebuffer.0.get());
@@ -333,6 +347,7 @@ impl<T: Target> Slot<T> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Bind a user-defined framebuffer to this slot.
+    #[doc(alias = "glBindFramebuffer")]
     pub fn bind_complete(&mut self, framebuffer: &Complete) -> Active<T, NotDefault, Complete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, framebuffer.0.get());
@@ -343,6 +358,7 @@ impl<T: Target> Slot<T> {
     ///
     /// On failure, the incomplete framebuffer is returned unchanged.
     // It is a limitation of my design that this requires a possibly redundant bind..
+    #[doc(alias = "glCheckFramebufferStatus")]
     pub fn try_complete(
         &mut self,
         framebuffer: Incomplete,
@@ -364,6 +380,7 @@ impl<T: Target> Slot<T> {
         }
     }
     /// Bind the default framebuffer, 0, to this slot.
+    #[doc(alias = "glBindFramebuffer")]
     pub fn bind_default(&mut self) -> Active<T, IsDefault, Complete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, 0);
@@ -372,7 +389,8 @@ impl<T: Target> Slot<T> {
     }
     /// Inherit the currently bound framebuffer. This may be the default framebuffer.
     ///
-    /// Some functionality is limited when the type of framebuffer (Default or NotDefault) is not known.
+    /// Some functionality is limited when the type of framebuffer (`Default` or `NotDefault`) is not known.
+    #[must_use]
     pub fn inherit(&self) -> Active<T, Unknown, Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
@@ -386,6 +404,7 @@ impl Slots {
     /// Bind a framebuffer to both the read and the draw slots.
     ///
     /// Refer to the individual slots to bind individually.
+    #[doc(alias = "glBindFramebuffer")]
     pub fn bind(
         &mut self,
         framebuffer: &Incomplete,
@@ -404,6 +423,7 @@ impl Slots {
     /// Bind a framebuffer to both the read and the draw slots.
     ///
     /// Refer to the individual slots to bind individually.
+    #[doc(alias = "glBindFramebuffer")]
     pub fn bind_complete(
         &mut self,
         framebuffer: &Complete,
@@ -422,6 +442,7 @@ impl Slots {
     /// Bind the default framebuffer to both the read and the draw slots.
     ///
     /// Refer to the individual slots to bind individually.
+    #[doc(alias = "glBindFramebuffer")]
     pub fn bind_default(
         &mut self,
     ) -> (
@@ -439,6 +460,7 @@ impl Slots {
     /// Delete framebuffers. If any were bound to a slot, the slot becomes bound to the default framebuffer.
     ///
     /// To delete [`Complete`] framebuffers, downgrade them to incomplete using [`Into::into`].
+    #[doc(alias = "glDeleteFramebuffers")]
     pub fn delete<const N: usize>(&mut self, framebuffers: [Incomplete; N]) {
         unsafe { crate::gl_delete_with(gl::DeleteFramebuffers, framebuffers) }
     }

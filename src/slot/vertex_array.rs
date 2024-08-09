@@ -19,6 +19,12 @@ impl Active<'_, NotDefault> {
     /// `enable` is provided as a convinience - if set to Some, will enable or disable
     /// the attribute after setting properties. If set to none, no action is taken,
     /// effectively inheriting the previous state. By default, attributes are disabled.
+    ///
+    /// # Panics
+    /// If the [`offset`](vertex_array::Attribute::offset) does not fit align requirements
+    /// for it's type.
+    #[doc(alias = "glVertexAttribPointer")]
+    #[doc(alias = "glVertexAttribIPointer")]
     pub fn attribute(
         &self,
         _source: &super::buffer::Active<'_, super::buffer::Array, NotDefault>,
@@ -54,25 +60,25 @@ impl Active<'_, NotDefault> {
         match attribute.ty {
             // ========== glVertexAttribIPointer
             AttributeType::Integer(ty) => unsafe {
-                gl::VertexAttribIPointer(index, size, ty.as_gl(), stride, offset_pointer)
+                gl::VertexAttribIPointer(index, size, ty.as_gl(), stride, offset_pointer);
             },
             // ========== glVertexAttribPointer
             AttributeType::Float(ty) => unsafe {
-                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::FALSE, stride, offset_pointer)
+                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::FALSE, stride, offset_pointer);
             },
             // Scaled (normalized = false)
             AttributeType::PackedScaled(ty) => unsafe {
-                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::FALSE, stride, offset_pointer)
+                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::FALSE, stride, offset_pointer);
             },
             AttributeType::Scaled(ty) => unsafe {
-                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::FALSE, stride, offset_pointer)
+                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::FALSE, stride, offset_pointer);
             },
             // Normalized
             AttributeType::Normalized(ty) => unsafe {
-                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::TRUE, stride, offset_pointer)
+                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::TRUE, stride, offset_pointer);
             },
             AttributeType::PackedNormalized(ty) => unsafe {
-                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::TRUE, stride, offset_pointer)
+                gl::VertexAttribPointer(index, size, ty.as_gl(), gl::TRUE, stride, offset_pointer);
             },
         }
 
@@ -83,11 +89,17 @@ impl Active<'_, NotDefault> {
         }
     }
     /// Enable or disable the attribute at `index`. By default, all attributes are disabled.
+    #[doc(alias = "glEnableVertexAttribArray")]
+    #[doc(alias = "glDisableVertexAttribArray")]
     pub fn set_attribute_enabled(&self, index: u32, enabled: bool) -> &Self {
         if enabled {
-            unsafe { gl::EnableVertexAttribArray(index) }
+            unsafe {
+                gl::EnableVertexAttribArray(index);
+            }
         } else {
-            unsafe { gl::DisableVertexAttribArray(index) }
+            unsafe {
+                gl::DisableVertexAttribArray(index);
+            }
         }
         self
     }
@@ -101,6 +113,7 @@ pub struct Active<'slot, Kind>(
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// Bind a user-defined array to this slot.
+    #[doc(alias = "glBindVertexArray")]
     pub fn bind(&mut self, array: &VertexArray) -> Active<NotDefault> {
         unsafe {
             gl::BindVertexArray(array.name().get());
@@ -108,6 +121,7 @@ impl Slot {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Make the slot empty.
+    #[doc(alias = "glBindVertexArray")]
     pub fn unbind(&mut self) -> Active<IsDefault> {
         unsafe {
             gl::BindVertexArray(0);
@@ -116,11 +130,13 @@ impl Slot {
     }
     /// Inherit the currently bound array - this may be no array at all.
     ///
-    /// Most functionality is limited when the status of the array (Empty or NotEmpty) is not known.
+    /// Most functionality is limited when the status of the array (`Empty` or `NotEmpty`) is not known.
+    #[must_use]
     pub fn inherit(&self) -> Active<Unknown> {
         Active(std::marker::PhantomData, std::marker::PhantomData)
     }
     /// Delete vertex arrays. If any were bound to this slot, the slot becomes unbound.
+    #[doc(alias = "glDeleteVertexArrays")]
     pub fn delete<const N: usize>(&mut self, arrays: [VertexArray; N]) {
         unsafe { crate::gl_delete_with(gl::DeleteVertexArrays, arrays) }
     }
