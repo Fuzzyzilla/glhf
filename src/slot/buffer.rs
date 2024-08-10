@@ -302,26 +302,26 @@ pub struct Slot<Binding: Target>(
 impl<Binding: Target> Slot<Binding> {
     /// Bind a buffer to this slot.
     #[doc(alias = "glBindBuffer")]
-    pub fn bind(&mut self, buffer: &Buffer) -> Active<Binding, NotDefault> {
+    pub fn bind(&mut self, buffer: &Buffer) -> &mut Active<Binding, NotDefault> {
         unsafe {
             gl::BindBuffer(Binding::TARGET, buffer.name().get());
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Make the slot empty.
     #[doc(alias = "glBindBuffer")]
-    pub fn unbind(&mut self) -> Active<Binding, IsDefault> {
+    pub fn unbind(&mut self) -> &mut Active<Binding, IsDefault> {
         unsafe {
             gl::BindBuffer(Binding::TARGET, 0);
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Inherit the currently bound buffer - this may be no buffer at all.
     ///
     /// Most functionality is limited when the status of the buffer (`Default` or `NotDefault`) is not known.
     #[must_use]
-    pub fn inherit(&self) -> Active<Binding, Unknown> {
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+    pub fn inherit(&self) -> &Active<Binding, Unknown> {
+        super::zst_ref()
     }
 }
 

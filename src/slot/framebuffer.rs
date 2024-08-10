@@ -79,7 +79,12 @@ pub struct Active<'slot, Slot, Default: Defaultness, Completeness>(
 
 impl<T: Target> Active<'_, T, NotDefault, Incomplete> {
     #[doc(alias = "glFramebufferTexture2D")]
-    pub fn texture_2d(&self, texture: &Texture2D, attachment: Attachment, mip_level: u32) -> &Self {
+    pub fn texture_2d(
+        &mut self,
+        texture: &Texture2D,
+        attachment: Attachment,
+        mip_level: u32,
+    ) -> &mut Self {
         unsafe {
             gl::FramebufferTexture2D(
                 T::TARGET,
@@ -104,10 +109,10 @@ impl<AnyDefaultness: Defaultness> Active<'_, Draw, AnyDefaultness, Complete> {
     /// and destination rectangles overlap, behavior is undefined.
     #[doc(alias = "glBlitFramebuffer")]
     pub unsafe fn blit_from<OtherDefaultness: Defaultness>(
-        &self,
+        &mut self,
         _from: &Active<Read, OtherDefaultness, Complete>,
         info: &BlitInfo,
-    ) -> &Self {
+    ) -> &mut Self {
         if info.mask.is_empty() {
             return self;
         }
@@ -137,7 +142,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Draw, AnyDefaultness, Complete> {
     ///
     /// The clear values are inherited from the global values `ClearColor`, `ClearDepth`, and `ClearStencil`.
     #[doc(alias = "glClear")]
-    pub fn clear(&self, mask: AspectMask) -> &Self {
+    pub fn clear(&mut self, mask: AspectMask) -> &mut Self {
         if mask.is_empty() {
             return self;
         }
@@ -156,7 +161,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     #[doc(alias = "glBlitFramebuffer")]
     pub unsafe fn blit_to<OtherDefaultness: Defaultness>(
         &self,
-        other: &Active<'_, Draw, OtherDefaultness, Complete>,
+        other: &mut Active<'_, Draw, OtherDefaultness, Complete>,
         info: &BlitInfo,
     ) -> &Self {
         other.blit_from(self, info);
@@ -176,7 +181,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     #[doc(alias = "glCopyTexSubImage2D")]
     pub unsafe fn copy_subimage_to(
         &self,
-        _to: &crate::slot::texture::Active<'_, crate::texture::D2>,
+        _to: &mut crate::slot::texture::Active<'_, crate::texture::D2>,
         level: u32,
         // Intentionally signed. It is not UB to read beyond the buffer, but it is UB to access those values read.
         // This may still be useful, idk X3
@@ -212,7 +217,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     #[doc(alias = "glCopyTexImage2D")]
     pub unsafe fn copy_image_to(
         &self,
-        _to: &crate::slot::texture::Active<'_, crate::texture::D2>,
+        _to: &mut crate::slot::texture::Active<'_, crate::texture::D2>,
         level: u32,
         // Fixme: this actually only accepts a subset of this enum.
         internal_format: crate::texture::InternalFormat,
@@ -245,7 +250,7 @@ impl<AnyCompleteness> Active<'_, Draw, NotDefault, AnyCompleteness> {
     /// # Panics
     /// Every element of `buffers` must be either none or a unique value.
     #[doc(alias = "glDrawBuffers")]
-    pub fn draw_buffers(&self, buffers: &[Buffer]) -> &Self {
+    pub fn draw_buffers(&mut self, buffers: &[Buffer]) -> &mut Self {
         assert!(is_all_unique(buffers));
         // Cast safety: Fieldless repr(u32), can be safely reinterpreted as &[u32]
         unsafe { gl::DrawBuffers(buffers.len().try_into().unwrap(), buffers.as_ptr().cast()) }
@@ -261,7 +266,7 @@ impl Active<'_, Draw, IsDefault, Complete> {
     /// # Panics
     /// Every element of `buffers` must be either none or a unique value.
     #[doc(alias = "glDrawBuffers")]
-    pub fn draw_buffers(&self, buffers: &[DefaultBuffer]) -> &Self {
+    pub fn draw_buffers(&mut self, buffers: &[DefaultBuffer]) -> &mut Self {
         assert!(is_all_unique(buffers));
         // Cast safety: Fieldless repr(u32), can be safely reinterpreted as &[u32]
         unsafe { gl::DrawBuffers(buffers.len().try_into().unwrap(), buffers.as_ptr().cast()) }
@@ -272,7 +277,7 @@ impl Active<'_, Draw, IsDefault, Complete> {
 impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
     /// Set the source for pixel read operations.
     #[doc(alias = "glReadBuffer")]
-    pub fn read_buffer(&self, buffer: Buffer) -> &Self {
+    pub fn read_buffer(&mut self, buffer: Buffer) -> &mut Self {
         unsafe { gl::ReadBuffer(buffer.as_gl()) }
         self
     }
@@ -281,7 +286,7 @@ impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
 impl Active<'_, Draw, IsDefault, Complete> {
     /// Set the source for pixel read operations.
     #[doc(alias = "glReadBuffer")]
-    pub fn read_buffer(&self, buffer: DefaultBuffer) -> &Self {
+    pub fn read_buffer(&mut self, buffer: DefaultBuffer) -> &mut Self {
         unsafe { gl::ReadBuffer(buffer.as_gl()) }
         self
     }
@@ -292,7 +297,7 @@ impl Active<'_, Draw, IsDefault, Complete> {
 pub struct IncompleteError<'slot, Slot> {
     /// The activation token of the framebuffer. Even if it failed to pass completion,
     /// it is bound.
-    pub active: Active<'slot, Slot, NotDefault, Incomplete>,
+    pub active: &'slot mut Active<'slot, Slot, NotDefault, Incomplete>,
     /// Returns ownership of the framebuffer.
     pub framebuffer: Incomplete,
     pub kind: IncompleteErrorKind,
@@ -340,19 +345,22 @@ pub struct Slot<T: Target>(pub(crate) NotSync, pub(crate) std::marker::PhantomDa
 impl<T: Target> Slot<T> {
     /// Bind a user-defined framebuffer to this slot.
     #[doc(alias = "glBindFramebuffer")]
-    pub fn bind(&mut self, framebuffer: &Incomplete) -> Active<T, NotDefault, Incomplete> {
+    pub fn bind(&mut self, framebuffer: &Incomplete) -> &mut Active<T, NotDefault, Incomplete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, framebuffer.0.get());
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Bind a user-defined framebuffer to this slot.
     #[doc(alias = "glBindFramebuffer")]
-    pub fn bind_complete(&mut self, framebuffer: &Complete) -> Active<T, NotDefault, Complete> {
+    pub fn bind_complete(
+        &mut self,
+        framebuffer: &Complete,
+    ) -> &mut Active<T, NotDefault, Complete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, framebuffer.0.get());
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Check completeness of the given framebuffer, binding it in the process.
     ///
@@ -362,14 +370,14 @@ impl<T: Target> Slot<T> {
     pub fn try_complete(
         &mut self,
         framebuffer: Incomplete,
-    ) -> Result<(Complete, Active<T, NotDefault, Complete>), IncompleteError<T>> {
+    ) -> Result<(Complete, &mut Active<T, NotDefault, Complete>), IncompleteError<T>> {
         let active = self.bind(&framebuffer);
         let status = unsafe { gl::CheckFramebufferStatus(T::TARGET) };
         if status == gl::FRAMEBUFFER_COMPLETE {
             Ok((
                 // Safety - we just checked, dummy!
                 unsafe { framebuffer.into_complete_unchecked() },
-                Active(std::marker::PhantomData, std::marker::PhantomData),
+                super::zst_mut(),
             ))
         } else {
             Err(IncompleteError {
@@ -381,18 +389,25 @@ impl<T: Target> Slot<T> {
     }
     /// Bind the default framebuffer, 0, to this slot.
     #[doc(alias = "glBindFramebuffer")]
-    pub fn bind_default(&mut self) -> Active<T, IsDefault, Complete> {
+    pub fn bind_default(&mut self) -> &mut Active<T, IsDefault, Complete> {
         unsafe {
             gl::BindFramebuffer(T::TARGET, 0);
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Inherit the currently bound framebuffer. This may be the default framebuffer.
     ///
     /// Some functionality is limited when the type of framebuffer (`Default` or `NotDefault`) is not known.
     #[must_use]
-    pub fn inherit(&self) -> Active<T, Unknown, Unknown> {
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+    pub fn inherit(&self) -> &Active<T, Unknown, Unknown> {
+        super::zst_ref()
+    }
+    /// Inherit the currently bound framebuffer. This may be the default framebuffer.
+    ///
+    /// Some functionality is limited when the type of framebuffer (`Default` or `NotDefault`) is not known.
+    #[must_use]
+    pub fn inherit_mut(&mut self) -> &mut Active<T, Unknown, Unknown> {
+        super::zst_mut()
     }
 }
 
@@ -409,16 +424,13 @@ impl Slots {
         &mut self,
         framebuffer: &Incomplete,
     ) -> (
-        Active<Read, NotDefault, Incomplete>,
-        Active<Draw, NotDefault, Incomplete>,
+        &mut Active<Read, NotDefault, Incomplete>,
+        &mut Active<Draw, NotDefault, Incomplete>,
     ) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, framebuffer.0.get());
         }
-        (
-            Active(std::marker::PhantomData, std::marker::PhantomData),
-            Active(std::marker::PhantomData, std::marker::PhantomData),
-        )
+        (super::zst_mut(), super::zst_mut())
     }
     /// Bind a framebuffer to both the read and the draw slots.
     ///
@@ -428,16 +440,13 @@ impl Slots {
         &mut self,
         framebuffer: &Complete,
     ) -> (
-        Active<Read, NotDefault, Complete>,
-        Active<Draw, NotDefault, Complete>,
+        &mut Active<Read, NotDefault, Complete>,
+        &mut Active<Draw, NotDefault, Complete>,
     ) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, framebuffer.0.get());
         }
-        (
-            Active(std::marker::PhantomData, std::marker::PhantomData),
-            Active(std::marker::PhantomData, std::marker::PhantomData),
-        )
+        (super::zst_mut(), super::zst_mut())
     }
     /// Bind the default framebuffer to both the read and the draw slots.
     ///
@@ -446,16 +455,13 @@ impl Slots {
     pub fn bind_default(
         &mut self,
     ) -> (
-        Active<Read, IsDefault, Complete>,
-        Active<Draw, IsDefault, Complete>,
+        &mut Active<Read, IsDefault, Complete>,
+        &mut Active<Draw, IsDefault, Complete>,
     ) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         }
-        (
-            Active(std::marker::PhantomData, std::marker::PhantomData),
-            Active(std::marker::PhantomData, std::marker::PhantomData),
-        )
+        (super::zst_mut(), super::zst_mut())
     }
     /// Delete framebuffers. If any were bound to a slot, the slot becomes bound to the default framebuffer.
     ///

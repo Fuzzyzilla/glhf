@@ -25,7 +25,7 @@ impl<Dim: Dimensionality> Active<'_, Dim> {
     #[doc(alias = "GL_TEXTURE_SWIZZLE_G")]
     #[doc(alias = "GL_TEXTURE_SWIZZLE_B")]
     #[doc(alias = "GL_TEXTURE_SWIZZLE_A")]
-    pub fn swizzle(&self, swizzle: [Swizzle; 4]) -> &Self {
+    pub fn swizzle(&mut self, swizzle: [Swizzle; 4]) -> &mut Self {
         let [r, g, b, a] = swizzle.map(|swizzle| swizzle.as_gl());
         unsafe {
             Self::tex_parameter_enum(gl::TEXTURE_SWIZZLE_R, r);
@@ -37,7 +37,7 @@ impl<Dim: Dimensionality> Active<'_, Dim> {
     }
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "GL_TEXTURE_MIN_FILTER")]
-    pub fn min_filter(&self, texel: Filter, mip: Option<Filter>) -> &Self {
+    pub fn min_filter(&mut self, texel: Filter, mip: Option<Filter>) -> &mut Self {
         let filter = match (texel, mip) {
             (Filter::Nearest, None) => gl::NEAREST,
             (Filter::Linear, None) => gl::LINEAR,
@@ -53,7 +53,7 @@ impl<Dim: Dimensionality> Active<'_, Dim> {
     }
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "GL_TEXTURE_MAG_FILTER")]
-    pub fn mag_filter(&self, texel: Filter) -> &Self {
+    pub fn mag_filter(&mut self, texel: Filter) -> &mut Self {
         let filter = match texel {
             Filter::Nearest => gl::NEAREST,
             Filter::Linear => gl::LINEAR,
@@ -66,7 +66,7 @@ impl<Dim: Dimensionality> Active<'_, Dim> {
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "GL_TEXTURE_COMPARE_MODE")]
     #[doc(alias = "GL_TEXTURE_COMPARE_FUNC")]
-    pub fn compare_mode(&self, mode: Option<CompareFunc>) -> &Self {
+    pub fn compare_mode(&mut self, mode: Option<CompareFunc>) -> &mut Self {
         if let Some(mode) = mode {
             unsafe {
                 Self::tex_parameter_enum(gl::TEXTURE_COMPARE_MODE, gl::COMPARE_REF_TO_TEXTURE);
@@ -84,12 +84,12 @@ impl<Dim: Dimensionality> Active<'_, Dim> {
 impl Active<'_, D2> {
     #[doc(alias = "glTexStorage2D")]
     pub fn storage(
-        &self,
+        &mut self,
         levels: NonZero<u32>,
         format: InternalFormat,
         width: NonZero<u32>,
         height: NonZero<u32>,
-    ) -> &Self {
+    ) -> &mut Self {
         unsafe {
             gl::TexStorage2D(
                 D2::TARGET,
@@ -106,13 +106,13 @@ pub struct Slot<Dim: Dimensionality>(pub(crate) NotSync, pub(crate) std::marker:
 impl<Dim: Dimensionality> Slot<Dim> {
     /// Bind a texture, returning an active token.
     #[doc(alias = "glBindTexture")]
-    pub fn bind(&mut self, texture: &Texture<Dim>) -> Active<Dim> {
+    pub fn bind(&mut self, texture: &Texture<Dim>) -> &mut Active<Dim> {
         unsafe { gl::BindTexture(Dim::TARGET, texture.0.get()) };
-        self.inherit()
+        super::zst_mut()
     }
     /// Bind a stateless texture, turning it into a `Texture` with the dimensionality of this slot.
     #[doc(alias = "glBindTexture")]
-    pub fn initialize(&mut self, texture: Stateless) -> (Texture<Dim>, Active<Dim>) {
+    pub fn initialize(&mut self, texture: Stateless) -> (Texture<Dim>, &mut Active<Dim>) {
         // Transition the type to an initialized one
         let texture = Texture(texture.0, std::marker::PhantomData);
         // bind it!
@@ -121,8 +121,13 @@ impl<Dim: Dimensionality> Slot<Dim> {
     }
     /// Inherit the currently bound texture. This may be the default texture.
     #[must_use]
-    pub fn inherit(&self) -> Active<Dim> {
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+    pub fn inherit(&self) -> &Active<Dim> {
+        super::zst_ref()
+    }
+    /// Inherit the currently bound texture. This may be the default texture.
+    #[must_use]
+    pub fn inherit_mut(&mut self) -> &mut Active<Dim> {
+        super::zst_mut()
     }
     /// Delete textures. If any were bound to this slot, the slot becomes bound to the default texture.
     #[doc(alias = "glDeleteTextures")]
