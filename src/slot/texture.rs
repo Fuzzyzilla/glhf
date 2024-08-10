@@ -10,12 +10,9 @@ use crate::{
 };
 
 /// Entry points for `glTex*`
-pub struct Active<'slot, Dim: Dimensionality>(
-    std::marker::PhantomData<&'slot ()>,
-    std::marker::PhantomData<Dim>,
-);
+pub struct Active<Dim: Dimensionality>(std::marker::PhantomData<Dim>);
 
-impl<Dim: Dimensionality> Active<'_, Dim> {
+impl<Dim: Dimensionality> Active<Dim> {
     unsafe fn tex_parameter_enum(pname: GLenum, param: GLenum) {
         gl::TexParameteri(Dim::TARGET, pname, param as _);
     }
@@ -81,7 +78,7 @@ impl<Dim: Dimensionality> Active<'_, Dim> {
     }
 }
 
-impl Active<'_, D2> {
+impl Active<D2> {
     #[doc(alias = "glTexStorage2D")]
     pub fn storage(
         &mut self,

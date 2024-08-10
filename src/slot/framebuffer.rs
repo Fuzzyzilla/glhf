@@ -180,7 +180,7 @@ impl<AnyDefaultness: Defaultness> Active<Read, AnyDefaultness, Complete> {
     #[doc(alias = "glCopyTexSubImage2D")]
     pub unsafe fn copy_subimage_to(
         &self,
-        _to: &mut crate::slot::texture::Active<'_, crate::texture::D2>,
+        _to: &mut crate::slot::texture::Active<crate::texture::D2>,
         level: u32,
         // Intentionally signed. It is not UB to read beyond the buffer, but it is UB to access those values read.
         // This may still be useful, idk X3
@@ -216,7 +216,7 @@ impl<AnyDefaultness: Defaultness> Active<Read, AnyDefaultness, Complete> {
     #[doc(alias = "glCopyTexImage2D")]
     pub unsafe fn copy_image_to(
         &self,
-        _to: &mut crate::slot::texture::Active<'_, crate::texture::D2>,
+        _to: &mut crate::slot::texture::Active<crate::texture::D2>,
         level: u32,
         // Fixme: this actually only accepts a subset of this enum.
         internal_format: crate::texture::InternalFormat,

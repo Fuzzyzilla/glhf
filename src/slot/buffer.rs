@@ -126,7 +126,12 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     // it must be properly aligned to the datatype of the buffer but... Well,, what
     // type?!?!? https://registry.khronos.org/OpenGL-Refpages/es3.0/
     #[doc(alias = "glBufferData")]
-    pub fn data(&self, data: &[u8], frequency: usage::Frequency, access: usage::Access) -> &Self {
+    pub fn data(
+        &mut self,
+        data: &[u8],
+        frequency: usage::Frequency,
+        access: usage::Access,
+    ) -> &mut Self {
         unsafe {
             gl::BufferData(
                 Binding::TARGET,
@@ -144,11 +149,11 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     /// buffer gets overwritten before any reads can take place.
     #[doc(alias = "glBufferData")]
     pub unsafe fn data_uninit(
-        &self,
+        &mut self,
         len: usize,
         frequency: usage::Frequency,
         access: usage::Access,
-    ) -> &Self {
+    ) -> &mut Self {
         unsafe {
             gl::BufferData(
                 Binding::TARGET,
@@ -163,7 +168,7 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     /// Ovwerite a sub-range of the data store.
     // FIXME: same alignment confusion as `Self::data`.
     #[doc(alias = "glBufferSubData")]
-    pub fn sub_data(&self, offset: usize, data: &[u8]) -> &Self {
+    pub fn sub_data(&mut self, offset: usize, data: &[u8]) -> &mut Self {
         unsafe {
             gl::BufferSubData(
                 Binding::TARGET,
