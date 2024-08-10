@@ -520,9 +520,7 @@ impl Window {
         let [vertex_buffer, index_buffer] = gl.new.buffers();
 
         // Bulk upload our scene data
-        let vbo = gl.buffer.array.bind(&vertex_buffer);
-        // Vertex arrays, containing both position and normals interleaved.
-        vbo.data(
+        let vbo = gl.buffer.array.bind(&vertex_buffer).data(
             bytemuck::cast_slice(&vertices),
             glhf::buffer::usage::Frequency::Static,
             glhf::buffer::usage::Access::Draw,
@@ -547,7 +545,7 @@ impl Window {
             .bind(&vao)
             .attribute(
                 // Read from our vertex buffer,
-                &vbo,
+                vbo,
                 // Vertex shader location zero,
                 0,
                 vertex_array::Attribute {
@@ -564,7 +562,7 @@ impl Window {
             )
             .attribute(
                 // Again, for the normals.
-                &vbo,
+                vbo,
                 1,
                 vertex_array::Attribute {
                     components: vertex_array::Components::Vec3,
@@ -632,22 +630,24 @@ impl Window {
         // Bind the index buffer and the vertex array, which contains references to our vertex buffer.
         let elements = gl.buffer.element_array.bind(&self.index_buffer);
         let vertex_array = gl.vertex_array.bind(&self.vao);
-        // Bind the shadow framebuffer and the shadow program.
-        let framebuffer = gl.framebuffer.draw.bind_complete(&self.shadow_framebuffer);
+        // Bind the shadow framebuffer, cleared, and the shadow program.
+        let framebuffer = gl
+            .framebuffer
+            .draw
+            .bind_complete(&self.shadow_framebuffer)
+            .clear(glhf::slot::framebuffer::AspectMask::DEPTH);
         let program = gl.program.bind(&self.shadow_program);
-        // Clear the depth buffer.
-        framebuffer.clear(glhf::slot::framebuffer::AspectMask::DEPTH);
 
         // Provide static proof-of-state to the `draw.elements` call.
         let draw_info = glhf::draw::ElementState {
             // We have an element buffer bound...
-            elements: &elements,
+            elements,
             // ...a complete framebuffer...
-            framebuffer: &framebuffer,
+            framebuffer,
             // ...a linked program...
-            program: &program,
+            program,
             // ...and a vertex array!
-            vertex_array: &vertex_array,
+            vertex_array,
         };
         unsafe {
             // Draw our indexed mesh.
@@ -660,10 +660,13 @@ impl Window {
             )
         };
 
-        // Switch to the "default" framebuffer, which is the window surface.
-        let framebuffer = gl.framebuffer.draw.bind_default();
+        // Switch to the "default" framebuffer, which is the window surface,
         // Clear it and it's depth-bufffer.
-        framebuffer.clear(glhf::slot::framebuffer::AspectMask::all());
+        let framebuffer = gl
+            .framebuffer
+            .draw
+            .bind_default()
+            .clear(glhf::slot::framebuffer::AspectMask::all());
 
         // Use the program that samples our shadow mask and calculates lighting.
         let program = gl.program.bind(&self.program);
@@ -677,10 +680,10 @@ impl Window {
 
         // And draw again!
         let draw_info = glhf::draw::ElementState {
-            elements: &elements,
-            framebuffer: &framebuffer,
-            program: &program,
-            vertex_array: &vertex_array,
+            elements,
+            framebuffer,
+            program,
+            vertex_array,
         };
         unsafe {
             gl.draw.elements(

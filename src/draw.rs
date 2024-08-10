@@ -10,16 +10,11 @@
 
 use crate::slot::{self, marker};
 
-type ActiveProgram<'a> = slot::program::Active<'a, marker::NotDefault>;
-type ActiveVertexArray<'a> = slot::vertex_array::Active<'a, marker::NotDefault>;
-type ActiveElementArray<'a> =
-    slot::buffer::Active<'a, slot::buffer::ElementArray, marker::NotDefault>;
-type ActiveDrawFramebuffer<'a, Defaultness> = slot::framebuffer::Active<
-    'a,
-    slot::framebuffer::Draw,
-    Defaultness,
-    crate::framebuffer::Complete,
->;
+type ActiveProgram = slot::program::Active<marker::NotDefault>;
+type ActiveVertexArray = slot::vertex_array::Active<marker::NotDefault>;
+type ActiveElementArray = slot::buffer::Active<slot::buffer::ElementArray, marker::NotDefault>;
+type ActiveDrawFramebuffer<Defaultness> =
+    slot::framebuffer::Active<slot::framebuffer::Draw, Defaultness, crate::framebuffer::Complete>;
 
 use super::{gl, GLEnum, NotSync};
 
@@ -60,23 +55,23 @@ impl ElementType {
 #[derive(Copy, Clone)]
 pub struct ArrayState<'a, Default: marker::Defaultness> {
     /// Static proof that a non-null Vertex Array is bound.
-    pub vertex_array: &'a ActiveVertexArray<'a>,
+    pub vertex_array: &'a ActiveVertexArray,
     /// Static proof that a Complete framebuffer is bound.
-    pub framebuffer: &'a ActiveDrawFramebuffer<'a, Default>,
+    pub framebuffer: &'a ActiveDrawFramebuffer<Default>,
     /// Static proof that a successfully-linked program is bound.
-    pub program: &'a ActiveProgram<'a>,
+    pub program: &'a ActiveProgram,
 }
 
 #[derive(Copy, Clone)]
 pub struct ElementState<'a, Default: marker::Defaultness> {
     /// Static proof that a non-null Element Array is bound.
-    pub elements: &'a ActiveElementArray<'a>,
+    pub elements: &'a ActiveElementArray,
     /// Static proof that a non-null Vertex Array is bound.
-    pub vertex_array: &'a ActiveVertexArray<'a>,
+    pub vertex_array: &'a ActiveVertexArray,
     /// Static proof that a Complete framebuffer is bound.
-    pub framebuffer: &'a ActiveDrawFramebuffer<'a, Default>,
+    pub framebuffer: &'a ActiveDrawFramebuffer<Default>,
     /// Static proof that a successfully-linked program is bound.
-    pub program: &'a ActiveProgram<'a>,
+    pub program: &'a ActiveProgram,
 }
 
 /// Bindings to `glDraw*`

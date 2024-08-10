@@ -60,7 +60,7 @@ pub struct LinkError {
     pub error: std::ffi::CString,
 }
 
-impl Active<'_, NotDefault> {
+impl Active<NotDefault> {
     /// Starting at `base_location`, bind one (or an array) of uniform scalars or vectors.
     /// The value may only be an array if it was declared as an array within the shader.
     ///
@@ -95,10 +95,10 @@ impl Active<'_, NotDefault> {
         T: program::uniform::Value,
         Value: Into<program::uniform::Vector<'tiny, T>>,
     >(
-        &self,
+        &mut self,
         base_location: u32,
         value: Value,
-    ) -> &Self {
+    ) -> &mut Self {
         use program::uniform::{Ty, Vector};
 
         let value = value.into();
@@ -177,10 +177,10 @@ impl Active<'_, NotDefault> {
     #[doc(alias = "glUniformMatrix3x4fv")]
     #[doc(alias = "glUniformMatrix4x3fv")]
     pub fn uniform_matrix<'tiny>(
-        &self,
+        &mut self,
         base_location: u32,
         value: impl Into<program::uniform::Matrix<'tiny>>,
-    ) -> &Self {
+    ) -> &mut Self {
         use program::uniform::Matrix;
         let value = value.into();
 
@@ -262,27 +262,24 @@ impl Active<'_, NotDefault> {
 }
 
 /// Entry points for working with `glUse`d programs.
-pub struct Active<'slot, Kind>(
-    std::marker::PhantomData<&'slot ()>,
-    std::marker::PhantomData<Kind>,
-);
+pub struct Active<Kind>(std::marker::PhantomData<Kind>);
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// `glUse` a linked program.
     #[doc(alias = "glUseProgram")]
-    pub fn bind(&mut self, program: &LinkedProgram) -> Active<NotDefault> {
+    pub fn bind(&mut self, program: &LinkedProgram) -> &mut Active<NotDefault> {
         unsafe {
             gl::UseProgram(program.name().get());
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Make the used program slot empty.
     #[doc(alias = "glUseProgram")]
-    pub fn unbind(&mut self) -> Active<IsDefault> {
+    pub fn unbind(&mut self) -> &mut Active<IsDefault> {
         unsafe {
             gl::UseProgram(0);
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Set the GLSL ES source code of a shader, then attempt to compile it.
     // Is there a usecase for allowing each step of this process manually...?
@@ -363,8 +360,15 @@ impl Slot {
     ///
     /// Most functionality is limited when the status of the program (`Empty` or `NotEmpty`) is not known.
     #[must_use]
-    pub fn inherit(&self) -> Active<Unknown> {
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+    pub fn inherit(&self) -> &Active<Unknown> {
+        super::zst_ref()
+    }
+    /// Inherit the currently bound program - this may be no program at all.
+    ///
+    /// Most functionality is limited when the status of the program (`Empty` or `NotEmpty`) is not known.
+    #[must_use]
+    pub fn inherit_mut(&mut self) -> &mut Active<Unknown> {
+        super::zst_mut()
     }
     /// Delete a program. If the program is currently bound to the slot, it remains so
     /// and will be deleted at the moment it is no longer bound.

@@ -10,7 +10,7 @@ use crate::{
 // client pointers could be bound to object 0, yikes! We don't do this, and
 // instead treat object 0 as null.
 
-impl Active<'_, NotDefault> {
+impl Active<NotDefault> {
     /// Set the properties of a vertex attribute slot. The source buffer is remembered
     /// internally, and does not need to be active at time of draw.
     ///
@@ -26,12 +26,12 @@ impl Active<'_, NotDefault> {
     #[doc(alias = "glVertexAttribPointer")]
     #[doc(alias = "glVertexAttribIPointer")]
     pub fn attribute(
-        &self,
-        _source: &super::buffer::Active<'_, super::buffer::Array, NotDefault>,
+        &mut self,
+        _source: &super::buffer::Active<super::buffer::Array, NotDefault>,
         index: u32,
         attribute: vertex_array::Attribute,
         enable: Option<bool>,
-    ) -> &Self {
+    ) -> &mut Self {
         use vertex_array::AttributeType;
         let size = attribute.components.into();
         let stride = attribute
@@ -91,7 +91,7 @@ impl Active<'_, NotDefault> {
     /// Enable or disable the attribute at `index`. By default, all attributes are disabled.
     #[doc(alias = "glEnableVertexAttribArray")]
     #[doc(alias = "glDisableVertexAttribArray")]
-    pub fn set_attribute_enabled(&self, index: u32, enabled: bool) -> &Self {
+    pub fn set_attribute_enabled(&mut self, index: u32, enabled: bool) -> &mut Self {
         if enabled {
             unsafe {
                 gl::EnableVertexAttribArray(index);
@@ -106,34 +106,38 @@ impl Active<'_, NotDefault> {
 }
 
 /// Entry points for `gl*VertexAttrib*`.
-pub struct Active<'slot, Kind>(
-    std::marker::PhantomData<&'slot ()>,
-    std::marker::PhantomData<Kind>,
-);
+pub struct Active<Kind>(std::marker::PhantomData<Kind>);
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// Bind a user-defined array to this slot.
     #[doc(alias = "glBindVertexArray")]
-    pub fn bind(&mut self, array: &VertexArray) -> Active<NotDefault> {
+    pub fn bind(&mut self, array: &VertexArray) -> &mut Active<NotDefault> {
         unsafe {
             gl::BindVertexArray(array.name().get());
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Make the slot empty.
     #[doc(alias = "glBindVertexArray")]
-    pub fn unbind(&mut self) -> Active<IsDefault> {
+    pub fn unbind(&mut self) -> &mut Active<IsDefault> {
         unsafe {
             gl::BindVertexArray(0);
         }
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+        super::zst_mut()
     }
     /// Inherit the currently bound array - this may be no array at all.
     ///
     /// Most functionality is limited when the status of the array (`Empty` or `NotEmpty`) is not known.
     #[must_use]
-    pub fn inherit(&self) -> Active<Unknown> {
-        Active(std::marker::PhantomData, std::marker::PhantomData)
+    pub fn inherit(&self) -> &Active<Unknown> {
+        super::zst_ref()
+    }
+    /// Inherit the currently bound array - this may be no array at all.
+    ///
+    /// Most functionality is limited when the status of the array (`Empty` or `NotEmpty`) is not known.
+    #[must_use]
+    pub fn inherit_mut(&mut self) -> &mut Active<Unknown> {
+        super::zst_mut()
     }
     /// Delete vertex arrays. If any were bound to this slot, the slot becomes unbound.
     #[doc(alias = "glDeleteVertexArrays")]
