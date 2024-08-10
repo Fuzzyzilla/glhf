@@ -1,3 +1,4 @@
+//! Binding and manipulating Buffers.
 use crate::{
     buffer::{usage, Buffer},
     gl,
@@ -207,7 +208,59 @@ impl<Binding: Target> Active<Binding, NotDefault> {
         }
         self
     }
+    /// Copy bytes from one region of this buffer to another.
+    ///
+    /// The source and destination regions must not overlap.
+    /// Neither the read nor write ranges may extend past the end of the buffer.
+    #[doc(alias = "glCopyBufferSubData")]
+    pub fn copy_self(&mut self, read_offset: usize, write_offset: usize, len: usize) -> &mut Self {
+        // This has to be it's own unique fn because the other calls require mut and immutable ref
+        // to self, obviously an error.
+
+        // Make both a unique and shared ref to this binding, for a temporary time.
+        // Usually this is instant UB, but we don't actually hold any mem - the mutability of self
+        // is merely a hint!
+        self.copy_from::<Binding>(super::zst_ref(), read_offset, write_offset, len)
+    }
+    /// Copy bytes from the other buffer into `self`.
+    ///
+    /// Neither the read nor write ranges may extend past the end of their respective buffers.
+    #[doc(alias = "glCopyBufferSubData")]
+    pub fn copy_from<OtherBinding: Target>(
+        &mut self,
+        _other: &Active<OtherBinding, NotDefault>,
+        read_offset: usize,
+        write_offset: usize,
+        len: usize,
+    ) -> &mut Self {
+        if len == 0 {
+            return self;
+        }
+        unsafe {
+            gl::CopyBufferSubData(
+                OtherBinding::TARGET,
+                Binding::TARGET,
+                read_offset.try_into().unwrap(),
+                write_offset.try_into().unwrap(),
+                len.try_into().unwrap(),
+            );
+        }
+        self
+    }
+    /// See [`Active::copy_from`].
+    #[doc(alias = "glCopyBufferSubData")]
+    pub fn copy_to<OtherBinding: Target>(
+        &self,
+        other: &mut Active<OtherBinding, NotDefault>,
+        read_offset: usize,
+        write_offset: usize,
+        len: usize,
+    ) -> &Self {
+        other.copy_from(self, read_offset, write_offset, len);
+        self
+    }
     /// Map a byte range. Use the marker types [`Read`] and [`ReadWrite`] to specify access mode.
+    /// Even Read-only access requires mutable access to the buffer.
     ///
     /// If the range is unbounded to the right, a `glGet` is invoked to map the rest of the buffer size.
     ///
@@ -221,8 +274,14 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     ///     .map::<buffer::ReadWrite>(..)
     ///     .fill(10u8);
     /// ```
+    /// # Alignment
+    /// Unfortunately, the GLES API makes no guarantees on the alignment of the returned byte slice. Do
+    /// not assume the pointer is aligned stronger than `1`.
+    ///
     /// # Panics
-    /// If the range end is before the beginning, or if mapping failed
+    /// * The range end is before the beginning.
+    /// * The range extends beyond the end of the datastore.
+    /// * The implementation is out of memory.
     ///
     /// # Safety
     /// This function is safe to call in all situations.

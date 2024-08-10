@@ -1,10 +1,11 @@
-//! Slots for Texture2D, Texture3D, TextureCubeMap, and Texture2DArray.
+//! Binding and manipulating `Texture{2D, 2DArray, 3D, Cube}`.
 
 use crate::{
     gl,
     state::CompareFunc,
     texture::{
-        Cube, D2Array, Dimensionality, Filter, InternalFormat, Stateless, Swizzle, Texture, D2, D3,
+        self, Cube, D2Array, Dimensionality, Filter, InternalFormat, Stateless, Swizzle, Texture,
+        D2, D3,
     },
     GLEnum, GLenum, NonZero, NotSync,
 };
@@ -16,6 +17,7 @@ impl<Dim: Dimensionality> Active<Dim> {
     unsafe fn tex_parameter_enum(pname: GLenum, param: GLenum) {
         gl::TexParameteri(Dim::TARGET, pname, param as _);
     }
+    #[doc(alias = "glTexParameter")]
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "GL_TEXTURE_SWIZZLE")]
     #[doc(alias = "GL_TEXTURE_SWIZZLE_R")]
@@ -32,6 +34,7 @@ impl<Dim: Dimensionality> Active<Dim> {
         }
         self
     }
+    #[doc(alias = "glTexParameter")]
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "GL_TEXTURE_MIN_FILTER")]
     pub fn min_filter(&mut self, texel: Filter, mip: Option<Filter>) -> &mut Self {
@@ -48,6 +51,7 @@ impl<Dim: Dimensionality> Active<Dim> {
         }
         self
     }
+    #[doc(alias = "glTexParameter")]
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "GL_TEXTURE_MAG_FILTER")]
     pub fn mag_filter(&mut self, texel: Filter) -> &mut Self {
@@ -60,6 +64,7 @@ impl<Dim: Dimensionality> Active<Dim> {
         }
         self
     }
+    #[doc(alias = "glTexParameter")]
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "GL_TEXTURE_COMPARE_MODE")]
     #[doc(alias = "GL_TEXTURE_COMPARE_FUNC")]
@@ -73,6 +78,78 @@ impl<Dim: Dimensionality> Active<Dim> {
             unsafe {
                 Self::tex_parameter_enum(gl::TEXTURE_COMPARE_MODE, gl::NONE);
             }
+        }
+        self
+    }
+    /// Specifies wrapping behavior in the X, Y, and Z dimensions, respectively.
+    #[doc(alias = "glTexParameter")]
+    #[doc(alias = "glTexParameteri")]
+    #[doc(alias = "TEXTURE_WRAP_S")]
+    #[doc(alias = "TEXTURE_WRAP_T")]
+    #[doc(alias = "TEXTURE_WRAP_R")]
+    pub fn wrap(&mut self, mode: [texture::Wrap; 3]) -> &mut Self {
+        let [s, t, r] = mode.map(|mode| mode.as_gl());
+        unsafe {
+            Self::tex_parameter_enum(gl::TEXTURE_WRAP_S, s);
+            Self::tex_parameter_enum(gl::TEXTURE_WRAP_T, t);
+            Self::tex_parameter_enum(gl::TEXTURE_WRAP_R, r);
+        }
+        self
+    }
+    /// Hints to the GL the continuous range of mipmap levels that have defined contents.
+    ///
+    /// The range may extend beyond the number of levels of `self`, it is silently clamped
+    /// during texture lookup.
+    #[doc(alias = "glTexParameter")]
+    #[doc(alias = "glTexParameteri")]
+    #[doc(alias = "TEXTURE_BASE_LEVEL")]
+    #[doc(alias = "TEXTURE_MAX_LEVEL")]
+    pub fn level_range(&mut self, range: impl std::ops::RangeBounds<u32>) -> &mut Self {
+        // Min, inclusive.
+        let min = match range.start_bound() {
+            std::ops::Bound::Unbounded => 0,
+            std::ops::Bound::Excluded(&n) => n.saturating_add(1),
+            std::ops::Bound::Included(&n) => n,
+        };
+        // Max, *also* inclusive!
+        let max = match range.end_bound() {
+            // This is the GL default *very big* mip number, lol
+            std::ops::Bound::Unbounded => 1000,
+            std::ops::Bound::Excluded(&n) => n.saturating_add(1),
+            std::ops::Bound::Included(&n) => n,
+        };
+
+        unsafe {
+            gl::TexParameteri(Dim::TARGET, gl::TEXTURE_BASE_LEVEL, min as _);
+            gl::TexParameteri(Dim::TARGET, gl::TEXTURE_MAX_LEVEL, max as _);
+        }
+        self
+    }
+    /// Clamps sampler level-of-detail calculations to the given range.
+    ///
+    /// The range may extend beyond the number of levels of `self`, it is silently clamped
+    /// during texture lookup.
+    #[doc(alias = "glTexParameter")]
+    #[doc(alias = "glTexParameterf")]
+    #[doc(alias = "TEXTURE_MIN_LOD")]
+    #[doc(alias = "TEXTURE_MAX_LOD")]
+    pub fn lod_range(&mut self, range: std::ops::RangeInclusive<f32>) -> &mut Self {
+        // would be nice if range was impl RangeBounds, but next_up/down isn't stable yet :V
+
+        unsafe {
+            gl::TexParameterf(Dim::TARGET, gl::TEXTURE_MIN_LOD, *range.start());
+            gl::TexParameterf(Dim::TARGET, gl::TEXTURE_MAX_LOD, *range.end());
+        }
+        self
+    }
+    /// Set whether the Depth or the Stencil component is returned when sampling a combined
+    /// depth-stencil texture.
+    #[doc(alias = "glTexParameter")]
+    #[doc(alias = "glTexParameteri")]
+    #[doc(alias = "GL_DEPTH_STENCIL_TEXTURE_MODE")]
+    pub fn depth_stencil_mode(&mut self, mode: crate::texture::DepthStencilMode) -> &mut Self {
+        unsafe {
+            Self::tex_parameter_enum(gl::DEPTH_STENCIL_TEXTURE_MODE, mode.as_gl());
         }
         self
     }
@@ -160,5 +237,15 @@ impl Slots {
             gl::ActiveTexture(gl::TEXTURE0.checked_add(slot).unwrap());
         }
         self
+    }
+    /// Delete textures. If any were bound to a slot, the slot becomes bound to the default texture.
+    ///
+    /// Use [`Into::into`] to convert textures into a deletion token. Alternatively, delete them
+    /// through their relavent [`Slot`]s to narrow the scope of lost bindings.
+    ///
+    /// This is provided primarily for bulk texture deletion of mixed dimensionality.
+    #[doc(alias = "glDeleteTextures")]
+    pub fn delete<const N: usize>(&mut self, textures: [texture::DeletionToken; N]) {
+        unsafe { crate::gl_delete_with(gl::DeleteTextures, textures) }
     }
 }

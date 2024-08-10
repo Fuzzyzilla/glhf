@@ -1,3 +1,5 @@
+//! Types and parameter enums for Buffers.
+
 use crate::{gl, GLenum, NonZeroName};
 
 /// Hints to the GL as to how often and in what way a buffer will be used.

@@ -1,3 +1,4 @@
+//! Using and compiling Shaders and Programs.
 use crate::{
     gl::{
         self,

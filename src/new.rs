@@ -1,3 +1,4 @@
+//! Rust-flavored allocation functions for GL objects.
 use crate::{
     buffer, framebuffer, gl, gl_delete_with, gl_gen_with, program, texture, vertex_array,
     NonZeroName, NotSync,

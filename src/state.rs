@@ -1,3 +1,4 @@
+//! Manipulation of global GL state.
 use super::{gl, GLEnum, NotSync};
 
 #[derive(Copy, Clone)]

@@ -1,3 +1,4 @@
+//! Binding and manipulating vertex array objects and their attribute definitions.
 use crate::{
     gl,
     slot::marker::{IsDefault, NotDefault, Unknown},

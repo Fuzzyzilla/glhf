@@ -1,3 +1,4 @@
+//! Types and parameter enums for Framebuffers.
 use super::{gl, NonZeroName};
 
 /// Buffers available for reading and writing on user-created framebuffers.

@@ -1,3 +1,4 @@
+//! Types and parameter enums for Shaders and Programs.
 use crate::ThinGLObject;
 
 use super::{gl, GLenum, NonZeroName};

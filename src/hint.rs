@@ -1,3 +1,4 @@
+//! Hints to the implementation.
 use super::{gl, GLEnum, NotSync};
 
 /// Hint to the GL the desired quality to speed tradeoff of an operation.

@@ -1,4 +1,4 @@
-//! # Open**GL**, **H**ightened **F**riendliness~!
+//! # GL, HF.
 //!
 //! Compile-time-checked, type-state bindings for OpenGL ES 3.X, smoothing over many
 //! of the OpenGL gotchas and foot-guns and providing an expressive coating of syntactic sugar.
@@ -15,14 +15,18 @@
 //! ## Doc Aliases
 //! Unfortunately the design requirements of this crate required that causes functionality be
 //! spread out across many namespaces. This crate makes use of `#[doc(alias = ...)]` to allow
-//! searching the docs for a GL API. Currently, the full name must be typed **exactly**,
-//! case-sensitive, including the `gl`/`GL` prefix.
+//! searching the docs for a GL API.
 //!
-//! For `glGet*` and `gl*Parameter*`, search by the GL `pname` parameter - for example
-//! `GL_BUFFER_SIZE` will find [`slot::buffer::Active::len`].
+//! Currently, the full name must be typed **exactly**, case-sensitive, including the
+//! `gl`/`GL` prefix.
 //!
-//! For other functions, search by the GL function name - for example, `glActiveTexture` will
-//! find [`slot::texture::Slots::unit`].
+//! For `glGet*` and `gl*Parameter*`, search by the GL `pname` constant - for example:
+//! * `GL_BUFFER_SIZE` will find [`slot::buffer::Active::len`].
+//! * `GL_TEXTURE_SWIZZLE_R` will find [`slot::texture::Active::swizzle`].
+//!
+//! For other functions, search by the GL function name - for example:
+//! * `glActiveTexture` will find [`slot::texture::Slots::unit`].
+//! * `glReleaseShaderCompiler` will find [`hint::Hint::release_compiler`].
 
 #![warn(rustdoc::all)]
 

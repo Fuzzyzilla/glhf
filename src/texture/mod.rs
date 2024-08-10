@@ -1,4 +1,4 @@
-//! Owned textures and their properties.
+//! Types and parameter enums for Textures of any dimensionality.
 use super::{gl, GLenum, NonZeroName};
 
 /* /// The size and dimensionality of an image.
@@ -375,6 +375,15 @@ pub enum Wrap {
 // Safety: is repr(u32) enum.
 unsafe impl crate::GLEnum for Wrap {}
 
+#[repr(u32)]
+#[derive(Copy, Clone)]
+pub enum DepthStencilMode {
+    Depth = gl::DEPTH_COMPONENT,
+    Stencil = gl::STENCIL_INDEX,
+}
+// Safety: is repr(u32) enum.
+unsafe impl crate::GLEnum for DepthStencilMode {}
+
 /// An application-owned texture. (i.e, *not* the default texture `0`)
 ///
 /// The type parameter, `Dim`, represents the kind of initialization. E.g., binding a [`Stateless`]
@@ -400,10 +409,30 @@ pub type TextureCube = Texture<Cube>;
 #[must_use = "dropping a gl handle leaks resources"]
 pub struct Stateless(pub(crate) NonZeroName);
 
+/// A texture who's state has been forgotten, for bulk deletions.
+#[repr(transparent)]
+#[must_use = "dropping a gl handle leaks resources"]
+pub struct DeletionToken(pub(crate) NonZeroName);
+
+impl From<Stateless> for DeletionToken {
+    fn from(value: Stateless) -> Self {
+        Self(value.0)
+    }
+}
+impl<Dim: Dimensionality> From<Texture<Dim>> for DeletionToken {
+    fn from(value: Texture<Dim>) -> Self {
+        Self(value.0)
+    }
+}
+
 impl crate::sealed::Sealed for Stateless {}
 // # Safety
 // Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
 unsafe impl crate::ThinGLObject for Stateless {}
+impl crate::sealed::Sealed for DeletionToken {}
+// # Safety
+// Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.
+unsafe impl crate::ThinGLObject for DeletionToken {}
 impl<Dim: Dimensionality> crate::sealed::Sealed for Texture<Dim> {}
 // # Safety
 // Repr(transparent) over a NonZero<u32> (and some ZSTs), so can safely transmute.

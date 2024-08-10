@@ -1,3 +1,4 @@
+//! Binding and manipulating Framebuffers.
 use crate::{
     framebuffer::{Attachment, Buffer, Complete, DefaultBuffer, Incomplete},
     gl,

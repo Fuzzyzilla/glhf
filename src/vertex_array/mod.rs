@@ -1,3 +1,4 @@
+//! Types and parameter enums for Vertex Array Objects and their attributes.
 use super::{gl, NonZero, NonZeroName};
 
 /// Determines the number of components to load, generally this should match the
