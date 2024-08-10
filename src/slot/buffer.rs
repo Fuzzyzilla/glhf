@@ -82,6 +82,10 @@ unsafe impl MapAccess for ReadWrite {
 /// Read (and possibly write, as specified by [`MapAccess`]) access to a GL buffer. The buffer
 /// memory is unmapped when this object is dropped.
 ///
+/// For the most part the drop glue is infallible, except in very rare circumstances where the
+/// graphics memory becomes lost, which causes a panic. Use [`MapGuard::unmap`] to handle this
+/// condition.
+///
 /// This type dereferences to a (possibly mutable) byte slice.
 pub struct MapGuard<'active, Binding: Target, Access: MapAccess> {
     // We hold it the slot and buffer mutably, as it is an error to use the buffer for any operation
@@ -91,6 +95,24 @@ pub struct MapGuard<'active, Binding: Target, Access: MapAccess> {
     access: std::marker::PhantomData<Access>,
     ptr: *mut u8,
     len: usize,
+}
+
+impl<Binding: Target, Access: MapAccess> MapGuard<'_, Binding, Access> {
+    /// Explicitly unmap the datastore.
+    /// This is the same as `Drop`ping the guard, however it allows for catching rare mapping failures.
+    #[doc(alias = "glUnmapBuffer")]
+    pub fn unmap(self) -> Result<(), UnmapError> {
+        // We are manually implementing the drop glue, DON'T DOUBLE DROP PLS :3
+        std::mem::forget(self);
+
+        let success = unsafe { gl::UnmapBuffer(Binding::TARGET) } == true.into();
+
+        if success {
+            Ok(())
+        } else {
+            Err(UnmapError::Lost)
+        }
+    }
 }
 
 impl<Binding: Target, Access: MapAccess> std::ops::Deref for MapGuard<'_, Binding, Access> {
@@ -111,10 +133,16 @@ impl<Binding: Target> std::ops::DerefMut for MapGuard<'_, Binding, ReadWrite> {
 impl<Binding: Target, Access: MapAccess> Drop for MapGuard<'_, Binding, Access> {
     fn drop(&mut self) {
         unsafe {
-            // Does raise errors, AFAIKT,
-            gl::UnmapBuffer(Binding::TARGET);
+            assert_eq!(gl::UnmapBuffer(Binding::TARGET), true.into());
         }
     }
+}
+
+#[derive(Debug)]
+pub enum UnmapError {
+    /// For implementation-specific reasons, the buffer's datastore was lost as a result of
+    /// this mapping. The entire buffer's contents become undefined, and must be re-written.
+    Lost,
 }
 
 /// Entry points for `glBuffer*`
@@ -195,10 +223,16 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     /// ```
     /// # Panics
     /// If the range end is before the beginning, or if mapping failed
+    ///
+    /// # Safety
+    /// This function is safe to call in all situations.
+    ///
+    /// However, no part of the returned byte slice may be passed as an argument
+    /// to *any* GL APIs other than `glUnmapBuffer`.
     // FIXME: same alignment confusion as `Self::data`.
     #[doc(alias = "glMapBuffer")]
     #[doc(alias = "glMapBufferRange")]
-    pub fn map<Access: MapAccess>(
+    pub unsafe fn map<Access: MapAccess>(
         &mut self,
         range: impl std::ops::RangeBounds<usize>,
     ) -> MapGuard<Binding, Access> {
@@ -223,7 +257,7 @@ impl<Binding: Target> Active<Binding, NotDefault> {
 
         self.map_impl(left, len)
     }
-    fn map_impl<Access: MapAccess>(
+    unsafe fn map_impl<Access: MapAccess>(
         &mut self,
         offset: usize,
         len: usize,
