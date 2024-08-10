@@ -72,12 +72,11 @@ pub struct BlitInfo {
 
 /// Entry points for `glFramebuffer*`
 #[derive(Debug)]
-pub struct Active<'slot, Slot, Default: Defaultness, Completeness>(
-    std::marker::PhantomData<&'slot ()>,
+pub struct Active<Slot, Default: Defaultness, Completeness>(
     std::marker::PhantomData<(Default, Slot, Completeness)>,
 );
 
-impl<T: Target> Active<'_, T, NotDefault, Incomplete> {
+impl<T: Target> Active<T, NotDefault, Incomplete> {
     #[doc(alias = "glFramebufferTexture2D")]
     pub fn texture_2d(
         &mut self,
@@ -98,7 +97,7 @@ impl<T: Target> Active<'_, T, NotDefault, Incomplete> {
     }
 }
 
-impl<AnyDefaultness: Defaultness> Active<'_, Draw, AnyDefaultness, Complete> {
+impl<AnyDefaultness: Defaultness> Active<Draw, AnyDefaultness, Complete> {
     /// Blit data from the read buffer into this buffer.
     ///
     /// The read buffer's current color attachment ([`Active::read_buffer`]) is copied
@@ -152,7 +151,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Draw, AnyDefaultness, Complete> {
         self
     }
 }
-impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
+impl<AnyDefaultness: Defaultness> Active<Read, AnyDefaultness, Complete> {
     /// Blit data from this buffer into the write buffer.
     ///
     /// This is the reverse of [Active<'_, Draw, OtherDefaultness, Complete>::blit_from],
@@ -161,7 +160,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     #[doc(alias = "glBlitFramebuffer")]
     pub unsafe fn blit_to<OtherDefaultness: Defaultness>(
         &self,
-        other: &mut Active<'_, Draw, OtherDefaultness, Complete>,
+        other: &mut Active<Draw, OtherDefaultness, Complete>,
         info: &BlitInfo,
     ) -> &Self {
         other.blit_from(self, info);
@@ -242,7 +241,7 @@ impl<AnyDefaultness: Defaultness> Active<'_, Read, AnyDefaultness, Complete> {
     }
 }
 
-impl<AnyCompleteness> Active<'_, Draw, NotDefault, AnyCompleteness> {
+impl<AnyCompleteness> Active<Draw, NotDefault, AnyCompleteness> {
     /// Direct fragment outputs into appropriate buffers.
     /// I.e., Fragment output 0 will go into the buffer defined by `buffers[0]`.
     /// If the slice is too short, remaining slots default to [`Buffer::None`]
@@ -258,7 +257,7 @@ impl<AnyCompleteness> Active<'_, Draw, NotDefault, AnyCompleteness> {
     }
 }
 
-impl Active<'_, Draw, IsDefault, Complete> {
+impl Active<Draw, IsDefault, Complete> {
     /// Direct fragment outputs into appropriate buffers.
     /// I.e., Fragment output 0 will go into the buffer defined by `buffers[0]`.
     /// If the slice is too short, remaining slots default to [`DefaultBuffer::None`]
@@ -274,7 +273,7 @@ impl Active<'_, Draw, IsDefault, Complete> {
     }
 }
 
-impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
+impl<AnyCompleteness> Active<Read, NotDefault, AnyCompleteness> {
     /// Set the source for pixel read operations.
     #[doc(alias = "glReadBuffer")]
     pub fn read_buffer(&mut self, buffer: Buffer) -> &mut Self {
@@ -283,7 +282,7 @@ impl<AnyCompleteness> Active<'_, Read, NotDefault, AnyCompleteness> {
     }
 }
 
-impl Active<'_, Draw, IsDefault, Complete> {
+impl Active<Draw, IsDefault, Complete> {
     /// Set the source for pixel read operations.
     #[doc(alias = "glReadBuffer")]
     pub fn read_buffer(&mut self, buffer: DefaultBuffer) -> &mut Self {
@@ -297,7 +296,7 @@ impl Active<'_, Draw, IsDefault, Complete> {
 pub struct IncompleteError<'slot, Slot> {
     /// The activation token of the framebuffer. Even if it failed to pass completion,
     /// it is bound.
-    pub active: &'slot mut Active<'slot, Slot, NotDefault, Incomplete>,
+    pub active: &'slot mut Active<Slot, NotDefault, Incomplete>,
     /// Returns ownership of the framebuffer.
     pub framebuffer: Incomplete,
     pub kind: IncompleteErrorKind,

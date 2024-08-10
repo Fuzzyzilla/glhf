@@ -10,7 +10,7 @@ use crate::{
 // client pointers could be bound to object 0, yikes! We don't do this, and
 // instead treat object 0 as null.
 
-impl Active<'_, NotDefault> {
+impl Active<NotDefault> {
     /// Set the properties of a vertex attribute slot. The source buffer is remembered
     /// internally, and does not need to be active at time of draw.
     ///
@@ -27,7 +27,7 @@ impl Active<'_, NotDefault> {
     #[doc(alias = "glVertexAttribIPointer")]
     pub fn attribute(
         &mut self,
-        _source: &super::buffer::Active<'_, super::buffer::Array, NotDefault>,
+        _source: &super::buffer::Active<super::buffer::Array, NotDefault>,
         index: u32,
         attribute: vertex_array::Attribute,
         enable: Option<bool>,
@@ -106,10 +106,7 @@ impl Active<'_, NotDefault> {
 }
 
 /// Entry points for `gl*VertexAttrib*`.
-pub struct Active<'slot, Kind>(
-    std::marker::PhantomData<&'slot ()>,
-    std::marker::PhantomData<Kind>,
-);
+pub struct Active<Kind>(std::marker::PhantomData<Kind>);
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// Bind a user-defined array to this slot.

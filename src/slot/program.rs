@@ -60,7 +60,7 @@ pub struct LinkError {
     pub error: std::ffi::CString,
 }
 
-impl Active<'_, NotDefault> {
+impl Active<NotDefault> {
     /// Starting at `base_location`, bind one (or an array) of uniform scalars or vectors.
     /// The value may only be an array if it was declared as an array within the shader.
     ///
@@ -262,10 +262,7 @@ impl Active<'_, NotDefault> {
 }
 
 /// Entry points for working with `glUse`d programs.
-pub struct Active<'slot, Kind>(
-    std::marker::PhantomData<&'slot ()>,
-    std::marker::PhantomData<Kind>,
-);
+pub struct Active<Kind>(std::marker::PhantomData<Kind>);
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// `glUse` a linked program.

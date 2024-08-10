@@ -83,17 +83,17 @@ unsafe impl MapAccess for ReadWrite {
 /// memory is unmapped when this object is dropped.
 ///
 /// This type dereferences to a (possibly mutable) byte slice.
-pub struct MapGuard<'active, 'slot: 'active, Binding: Target, Access: MapAccess> {
+pub struct MapGuard<'active, Binding: Target, Access: MapAccess> {
     // We hold it the slot and buffer mutably, as it is an error to use the buffer for any operation
     // until it is unmapped. Holding it this way also ensures that Self::drop has safe access
     // to gl calls due to safety precondition of `crate::GLHF`.
-    _active: &'active mut Active<'slot, Binding, NotDefault>,
+    _active: &'active mut Active<Binding, NotDefault>,
     access: std::marker::PhantomData<Access>,
     ptr: *mut u8,
     len: usize,
 }
 
-impl<Binding: Target, Access: MapAccess> std::ops::Deref for MapGuard<'_, '_, Binding, Access> {
+impl<Binding: Target, Access: MapAccess> std::ops::Deref for MapGuard<'_, Binding, Access> {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
@@ -101,14 +101,14 @@ impl<Binding: Target, Access: MapAccess> std::ops::Deref for MapGuard<'_, '_, Bi
         unsafe { std::slice::from_raw_parts(self.ptr.cast_const(), self.len) }
     }
 }
-impl<Binding: Target> std::ops::DerefMut for MapGuard<'_, '_, Binding, ReadWrite> {
+impl<Binding: Target> std::ops::DerefMut for MapGuard<'_, Binding, ReadWrite> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
         // Align is one.
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
-impl<Binding: Target, Access: MapAccess> Drop for MapGuard<'_, '_, Binding, Access> {
+impl<Binding: Target, Access: MapAccess> Drop for MapGuard<'_, Binding, Access> {
     fn drop(&mut self) {
         unsafe {
             // Does raise errors, AFAIKT,
@@ -119,11 +119,8 @@ impl<Binding: Target, Access: MapAccess> Drop for MapGuard<'_, '_, Binding, Acce
 
 /// Entry points for `glBuffer*`
 #[derive(Debug)]
-pub struct Active<'slot, Slot, Kind>(
-    std::marker::PhantomData<&'slot mut ()>,
-    std::marker::PhantomData<(Kind, Slot)>,
-);
-impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
+pub struct Active<Slot, Kind>(std::marker::PhantomData<(Kind, Slot)>);
+impl<Binding: Target> Active<Binding, NotDefault> {
     /// (Re)allocate the datastore of the buffer and fill with bytes from `data`.
     // FIXME: The reference has verbage about the alignment of the buffer, and that
     // it must be properly aligned to the datatype of the buffer but... Well,, what
@@ -196,10 +193,10 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
     // FIXME: same alignment confusion as `Self::data`.
     #[doc(alias = "glMapBuffer")]
     #[doc(alias = "glMapBufferRange")]
-    pub fn map<'this, Access: MapAccess>(
-        &'this mut self,
+    pub fn map<Access: MapAccess>(
+        &mut self,
         range: impl std::ops::RangeBounds<usize>,
-    ) -> MapGuard<'this, 'slot, Binding, Access> {
+    ) -> MapGuard<Binding, Access> {
         use std::ops::Bound;
         let left = range.start_bound().cloned();
         let right = range.end_bound().cloned();
@@ -221,11 +218,11 @@ impl<'slot, Binding: Target> Active<'slot, Binding, NotDefault> {
 
         self.map_impl(left, len)
     }
-    fn map_impl<'this, Access: MapAccess>(
-        &'this mut self,
+    fn map_impl<Access: MapAccess>(
+        &mut self,
         offset: usize,
         len: usize,
-    ) -> MapGuard<'this, 'slot, Binding, Access> {
+    ) -> MapGuard<Binding, Access> {
         let ptr = unsafe {
             gl::MapBufferRange(
                 Binding::TARGET,

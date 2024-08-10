@@ -545,7 +545,7 @@ impl Window {
             .bind(&vao)
             .attribute(
                 // Read from our vertex buffer,
-                &vbo,
+                vbo,
                 // Vertex shader location zero,
                 0,
                 vertex_array::Attribute {
@@ -562,7 +562,7 @@ impl Window {
             )
             .attribute(
                 // Again, for the normals.
-                &vbo,
+                vbo,
                 1,
                 vertex_array::Attribute {
                     components: vertex_array::Components::Vec3,
