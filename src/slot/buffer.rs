@@ -93,7 +93,7 @@ pub struct MapGuard<'active, Binding: Target, Access: MapAccess> {
     // until it is unmapped. Holding it this way also ensures that Self::drop has safe access
     // to gl calls due to safety precondition of `crate::GLHF`.
     _active: &'active mut Active<Binding, NotDefault>,
-    access: std::marker::PhantomData<Access>,
+    access: core::marker::PhantomData<Access>,
     ptr: *mut u8,
     len: usize,
 }
@@ -104,7 +104,7 @@ impl<Binding: Target, Access: MapAccess> MapGuard<'_, Binding, Access> {
     #[doc(alias = "glUnmapBuffer")]
     pub fn unmap(self) -> Result<(), UnmapError> {
         // We are manually implementing the drop glue, DON'T DOUBLE DROP PLS :3
-        std::mem::forget(self);
+        core::mem::forget(self);
 
         let success = unsafe { gl::UnmapBuffer(Binding::TARGET) } == true.into();
 
@@ -116,19 +116,19 @@ impl<Binding: Target, Access: MapAccess> MapGuard<'_, Binding, Access> {
     }
 }
 
-impl<Binding: Target, Access: MapAccess> std::ops::Deref for MapGuard<'_, Binding, Access> {
+impl<Binding: Target, Access: MapAccess> core::ops::Deref for MapGuard<'_, Binding, Access> {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
         // Align is one.
-        unsafe { std::slice::from_raw_parts(self.ptr.cast_const(), self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr.cast_const(), self.len) }
     }
 }
-impl<Binding: Target> std::ops::DerefMut for MapGuard<'_, Binding, ReadWrite> {
+impl<Binding: Target> core::ops::DerefMut for MapGuard<'_, Binding, ReadWrite> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // Safety: not null (that's an error condition and self wouldn't have been made)
         // Align is one.
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
 impl<Binding: Target, Access: MapAccess> Drop for MapGuard<'_, Binding, Access> {
@@ -148,7 +148,7 @@ pub enum UnmapError {
 
 /// Entry points for `glBuffer*`
 #[derive(Debug)]
-pub struct Active<Slot, Kind>(std::marker::PhantomData<(Kind, Slot)>);
+pub struct Active<Slot, Kind>(core::marker::PhantomData<(Kind, Slot)>);
 impl<Binding: Target> Active<Binding, NotDefault> {
     /// (Re)allocate the datastore of the buffer and fill with bytes from `data`.
     // FIXME: The reference has verbage about the alignment of the buffer, and that
@@ -188,7 +188,7 @@ impl<Binding: Target> Active<Binding, NotDefault> {
                 Binding::TARGET,
                 len.try_into().unwrap(),
                 // Null for uninit
-                std::ptr::null(),
+                core::ptr::null(),
                 usage::as_gl(frequency, access),
             );
         }
@@ -293,9 +293,9 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     #[doc(alias = "glMapBufferRange")]
     pub unsafe fn map<Access: MapAccess>(
         &mut self,
-        range: impl std::ops::RangeBounds<usize>,
+        range: impl core::ops::RangeBounds<usize>,
     ) -> MapGuard<Binding, Access> {
-        use std::ops::Bound;
+        use core::ops::Bound;
         let left = range.start_bound().cloned();
         let right = range.end_bound().cloned();
         // Min offset, inclusive.
@@ -332,7 +332,7 @@ impl<Binding: Target> Active<Binding, NotDefault> {
         assert!(!ptr.is_null());
         MapGuard {
             _active: self,
-            access: std::marker::PhantomData,
+            access: core::marker::PhantomData,
             ptr: ptr.cast(),
             len,
         }
@@ -352,7 +352,7 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     #[must_use]
     pub fn len(&self) -> usize {
         let len = unsafe {
-            let mut len = std::mem::MaybeUninit::uninit();
+            let mut len = core::mem::MaybeUninit::uninit();
             gl::GetBufferParameteri64v(Binding::TARGET, gl::BUFFER_SIZE, len.as_mut_ptr());
             len.assume_init()
         };
@@ -368,7 +368,7 @@ impl<Binding: Target> Active<Binding, NotDefault> {
     pub fn usage(&self) -> (usage::Frequency, usage::Access) {
         use usage::{Access as A, Frequency as F};
         let usage = unsafe {
-            let mut usage = std::mem::MaybeUninit::uninit();
+            let mut usage = core::mem::MaybeUninit::uninit();
             gl::GetBufferParameteriv(Binding::TARGET, gl::BUFFER_USAGE, usage.as_mut_ptr());
             usage.assume_init()
         };
@@ -392,7 +392,7 @@ impl<Binding: Target> Active<Binding, NotDefault> {
 
 pub struct Slot<Binding: Target>(
     pub(crate) NotSync,
-    pub(crate) std::marker::PhantomData<Binding>,
+    pub(crate) core::marker::PhantomData<Binding>,
 );
 impl<Binding: Target> Slot<Binding> {
     /// Bind a buffer to this slot.

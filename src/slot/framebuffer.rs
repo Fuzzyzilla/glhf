@@ -75,7 +75,7 @@ pub struct BlitInfo {
 /// Entry points for `glFramebuffer*`
 #[derive(Debug)]
 pub struct Active<Slot, Default: Defaultness, Completeness>(
-    std::marker::PhantomData<(Default, Slot, Completeness)>,
+    core::marker::PhantomData<(Default, Slot, Completeness)>,
 );
 
 impl<T: Target> Active<T, NotDefault, Incomplete> {
@@ -378,7 +378,7 @@ impl IncompleteErrorKind {
     }
 }
 
-pub struct Slot<T: Target>(pub(crate) NotSync, pub(crate) std::marker::PhantomData<T>);
+pub struct Slot<T: Target>(pub(crate) NotSync, pub(crate) core::marker::PhantomData<T>);
 impl<T: Target> Slot<T> {
     /// Bind a user-defined framebuffer to this slot.
     #[doc(alias = "glBindFramebuffer")]

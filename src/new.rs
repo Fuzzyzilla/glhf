@@ -64,7 +64,7 @@ impl New {
             .expect("internal gl error while creating shader");
 
         // Safety: Precondition of ThinGLOject.
-        unsafe { std::mem::transmute(name) }
+        unsafe { core::mem::transmute(name) }
     }
     /// Initialize a program object.
     /// # Panics
@@ -77,6 +77,6 @@ impl New {
             .expect("internal gl error while creating program");
 
         // Safety: Precondition of ThinGLOject.
-        unsafe { std::mem::transmute(name) }
+        unsafe { core::mem::transmute(name) }
     }
 }

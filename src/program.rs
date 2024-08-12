@@ -40,12 +40,12 @@ pub mod uniform {
         (pub struct $name:ident(pub $ty:ty)) => {
             #[repr(C)]
             pub struct $name(pub $ty);
-            impl ::std::convert::From<$ty> for $name {
+            impl ::core::convert::From<$ty> for $name {
                 fn from(value: $ty) -> Self {
                     Self(value)
                 }
             }
-            impl ::std::convert::From<$name> for $ty {
+            impl ::core::convert::From<$name> for $ty {
                 fn from(value: $name) -> Self {
                     value.0
                 }
@@ -111,12 +111,12 @@ pub mod uniform {
 
     macro_rules! matrix_froms {
         {$from:tt} => {
-            impl<'a> ::std::convert::From<&'a $from> for Matrix<'a> {
+            impl<'a> ::core::convert::From<&'a $from> for Matrix<'a> {
                 fn from(value: &'a $from) -> Self {
-                    Self::$from(::std::slice::from_ref(value))
+                    Self::$from(::core::slice::from_ref(value))
                 }
             }
-            impl<'a> ::std::convert::From<&'a [$from]> for Matrix<'a> {
+            impl<'a> ::core::convert::From<&'a [$from]> for Matrix<'a> {
                 fn from(value: &'a [$from]) -> Self {
                     Self::$from(value)
                 }
@@ -171,12 +171,12 @@ pub mod uniform {
 
     macro_rules! vector_froms {
         {$from:tt} => {
-            impl<'a, T: crate::program::uniform::Value> ::std::convert::From<&'a $from<T>> for Vector<'a, T> {
+            impl<'a, T: crate::program::uniform::Value> ::core::convert::From<&'a $from<T>> for Vector<'a, T> {
                 fn from(value: &'a $from<T>) -> Self {
-                    Self::$from(::std::slice::from_ref(value))
+                    Self::$from(::core::slice::from_ref(value))
                 }
             }
-            impl<'a, T: crate::program::uniform::Value> ::std::convert::From<&'a [$from<T>]> for Vector<'a, T> {
+            impl<'a, T: crate::program::uniform::Value> ::core::convert::From<&'a [$from<T>]> for Vector<'a, T> {
                 fn from(value: &'a [$from<T>]) -> Self {
                     Self::$from(value)
                 }
@@ -186,7 +186,7 @@ pub mod uniform {
 
     impl<'a, T: Value> From<&'a T> for Vector<'a, T> {
         fn from(value: &'a T) -> Self {
-            Self::Scalar(std::slice::from_ref(value))
+            Self::Scalar(core::slice::from_ref(value))
         }
     }
     impl<'a, T: Value> From<&'a [T]> for Vector<'a, T> {
@@ -234,7 +234,7 @@ pub enum ProgramShaders<'a> {
 #[repr(transparent)]
 #[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
-pub struct EmptyShader<Ty: Type>(pub(crate) NonZeroName, std::marker::PhantomData<Ty>);
+pub struct EmptyShader<Ty: Type>(pub(crate) NonZeroName, core::marker::PhantomData<Ty>);
 impl<Ty: Type> EmptyShader<Ty> {
     /// Convert the typestate without checking for correctness.
     ///
@@ -242,7 +242,7 @@ impl<Ty: Type> EmptyShader<Ty> {
     /// If `glGetShaderiv(self, GL_COMPILE_STATUS)` would return `true`, this is safe.
     pub unsafe fn into_compiled_unchecked(self) -> CompiledShader<Ty> {
         // Safety: ThinGLObject requires that NonZeroName is a valid CompiledShader
-        unsafe { std::mem::transmute(self.into_name()) }
+        unsafe { core::mem::transmute(self.into_name()) }
     }
 }
 
@@ -255,7 +255,7 @@ unsafe impl<Ty: Type> crate::ThinGLObject for EmptyShader<Ty> {}
 #[repr(transparent)]
 #[must_use = "dropping a gl handle leaks resources"]
 #[derive(Debug)]
-pub struct CompiledShader<Ty: Type>(pub(crate) NonZeroName, std::marker::PhantomData<Ty>);
+pub struct CompiledShader<Ty: Type>(pub(crate) NonZeroName, core::marker::PhantomData<Ty>);
 
 impl<Ty: Type> crate::sealed::Sealed for CompiledShader<Ty> {}
 // # Safety
@@ -266,7 +266,7 @@ unsafe impl<Ty: Type> crate::ThinGLObject for CompiledShader<Ty> {}
 impl<Ty: Type> From<CompiledShader<Ty>> for EmptyShader<Ty> {
     fn from(value: CompiledShader<Ty>) -> Self {
         // Safety: Procondition of ThinGLObject
-        unsafe { std::mem::transmute(value) }
+        unsafe { core::mem::transmute(value) }
     }
 }
 
@@ -282,7 +282,7 @@ impl Program {
     /// If `glGetProgramiv(self, GL_LINK_STATUS)` would return `true`, this is safe.
     pub unsafe fn into_linked_unchecked(self) -> LinkedProgram {
         // Safety: ThinGLObject requires that NonZeroName is a valid LinkedProgram
-        unsafe { std::mem::transmute(self.into_name()) }
+        unsafe { core::mem::transmute(self.into_name()) }
     }
 }
 
@@ -301,7 +301,7 @@ pub struct LinkedProgram(pub(crate) NonZeroName);
 impl From<LinkedProgram> for Program {
     fn from(value: LinkedProgram) -> Self {
         // Safety: Procondition of ThinGLObject
-        unsafe { std::mem::transmute(value) }
+        unsafe { core::mem::transmute(value) }
     }
 }
 

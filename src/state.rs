@@ -328,7 +328,7 @@ impl State {
     /// Defines a linear mapping from [-1, 1] NDC space to `range` in depth map space.
     /// Range may be reversed, i.e. `1.0..=-1.0` is a valid range.
     #[doc(alias = "glDepthRangef")]
-    pub fn depth_range(&self, range: std::ops::RangeInclusive<f32>) -> &Self {
+    pub fn depth_range(&self, range: core::ops::RangeInclusive<f32>) -> &Self {
         unsafe {
             gl::DepthRangef(*range.start(), *range.end());
         }

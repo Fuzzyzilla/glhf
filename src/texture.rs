@@ -393,7 +393,7 @@ unsafe impl crate::GLEnum for DepthStencilMode {}
 #[must_use = "dropping a gl handle leaks resources"]
 pub struct Texture<Dim: Dimensionality>(
     pub(crate) NonZeroName,
-    pub(crate) std::marker::PhantomData<Dim>,
+    pub(crate) core::marker::PhantomData<Dim>,
 );
 impl<Dim: Dimensionality> Texture<Dim> {
     pub const TARGET: GLenum = Dim::TARGET;

@@ -46,7 +46,7 @@ impl Active<NotDefault> {
         // We don't allow this usage, but...
         // If the user somehow executes an arrayed draw with this vao bound while GL_ARRAY_BUFFER_BINDING is
         // 0 (null), this byte offset value will be interpreted as a host pointer and POOF everything explodes.
-        let offset_pointer: *const std::ffi::c_void = attribute.offset as _;
+        let offset_pointer: *const core::ffi::c_void = attribute.offset as _;
 
         // `is_aligned_to`
         assert_eq!(
@@ -107,7 +107,7 @@ impl Active<NotDefault> {
 }
 
 /// Entry points for `gl*VertexAttrib*`.
-pub struct Active<Kind>(std::marker::PhantomData<Kind>);
+pub struct Active<Kind>(core::marker::PhantomData<Kind>);
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// Bind a user-defined array to this slot.

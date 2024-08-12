@@ -34,12 +34,12 @@ impl IntegerAttribute {
     #[must_use]
     pub fn align_of(&self) -> usize {
         match self {
-            Self::U8 => std::mem::align_of::<u8>(),
-            Self::I8 => std::mem::align_of::<i8>(),
-            Self::U16 => std::mem::align_of::<u16>(),
-            Self::I16 => std::mem::align_of::<i16>(),
-            Self::U32 => std::mem::align_of::<u32>(),
-            Self::I32 => std::mem::align_of::<i32>(),
+            Self::U8 => core::mem::align_of::<u8>(),
+            Self::I8 => core::mem::align_of::<i8>(),
+            Self::U16 => core::mem::align_of::<u16>(),
+            Self::I16 => core::mem::align_of::<i16>(),
+            Self::U32 => core::mem::align_of::<u32>(),
+            Self::I32 => core::mem::align_of::<i32>(),
         }
     }
 }
@@ -62,9 +62,9 @@ impl FloatingAttribute {
     #[must_use]
     pub fn align_of(&self) -> usize {
         match self {
-            Self::F16 => std::mem::align_of::<u16>(),
-            Self::F32 => std::mem::align_of::<f32>(),
-            Self::Fixed16_16 => std::mem::align_of::<u32>(),
+            Self::F16 => core::mem::align_of::<u16>(),
+            Self::F32 => core::mem::align_of::<f32>(),
+            Self::Fixed16_16 => core::mem::align_of::<u32>(),
         }
     }
 }
@@ -87,7 +87,7 @@ impl PackedIntegerAttribute {
     #[must_use]
     pub fn align_of(&self) -> usize {
         match self {
-            Self::IReverse2_10_10_10 | Self::UReverse2_10_10_10 => std::mem::align_of::<u32>(),
+            Self::IReverse2_10_10_10 | Self::UReverse2_10_10_10 => core::mem::align_of::<u32>(),
         }
     }
 }

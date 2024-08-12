@@ -27,11 +27,22 @@
 //! For other functions, search by the GL function name - for example:
 //! * `glActiveTexture` will find [`slot::texture::Slots::unit`].
 //! * `glReleaseShaderCompiler` will find [`hint::Hint::release_compiler`].
+//!
+//! ## Features
+//! * **`alloc` (default)**
+//! > Enables functions that involve `glGet`ting `CStrings`, such as program linker logs.
+//! > without this feature, the user must manually invoke the relavent GL calls.
+//!
+//! This crate is `no_std` by default.
 
+#![no_std]
 #![warn(rustdoc::all)]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
+use core::num::NonZero;
 use gl::types::{GLenum, GLsizei, GLuint};
-use std::num::NonZero;
 type NonZeroName = NonZero<GLuint>;
 
 pub mod gl {
@@ -96,8 +107,8 @@ impl GLHF {
     ///   in methods on another one's context.
     #[must_use]
     pub unsafe fn current() -> Self {
+        use core::marker::PhantomData;
         use slot::{buffer, framebuffer, program, texture, vertex_array};
-        use std::marker::PhantomData;
 
         // I find it really funny that all this code is constructing a ZST, and is thus a no-op, Lol
         Self {
@@ -146,7 +157,7 @@ pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
     /// For now uhh, don't thrash the typestate, thanx.
     unsafe fn name(&self) -> NonZeroName {
         // Safety - the trait precondition!
-        unsafe { *std::ptr::from_ref(self).cast() }
+        unsafe { *core::ptr::from_ref(self).cast() }
     }
     /// Export the `GLuint` name, losing the typestate.
     #[must_use = "dropping a gl handle leaks resources"]
@@ -154,7 +165,7 @@ pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
         // Safety - the user can't thrash the type state, since they are
         // moving the name out of the type state system.
         let name = unsafe { self.name() };
-        std::mem::forget(self);
+        core::mem::forget(self);
         name
     }
 }
@@ -168,7 +179,7 @@ pub unsafe trait ThinGLObject: sealed::Sealed + Sized {
 pub unsafe trait GLEnum {
     /// Access the raw `GLenum` value of this enum.
     fn as_gl(&self) -> GLenum {
-        unsafe { *std::ptr::from_ref(self).cast() }
+        unsafe { *core::ptr::from_ref(self).cast() }
     }
 }
 /// # Safety
@@ -180,7 +191,7 @@ unsafe fn gl_gen_with<const N: usize, T: ThinGLObject>(
 ) -> [T; N] {
     // Hm. What if usize is smaller than GLsizei?
     const { assert!(N <= GLsizei::MAX as _) };
-    let mut names = std::mem::MaybeUninit::<[T; N]>::uninit();
+    let mut names = core::mem::MaybeUninit::<[T; N]>::uninit();
 
     // `cast` here goes from array of something repr(NonZero<GLuint>) to GLuint (Safety precondition of impl ThinGLObject).
     gl_gen(N as _, names.as_mut_ptr().cast());
@@ -189,7 +200,7 @@ unsafe fn gl_gen_with<const N: usize, T: ThinGLObject>(
     // NON ZERO value. This requirement is forwarded to the signature of this fn.
     #[cfg(debug_assertions)]
     {
-        let names = std::mem::transmute_copy::<_, std::mem::MaybeUninit<[GLuint; N]>>(&names);
+        let names = core::mem::transmute_copy::<_, core::mem::MaybeUninit<[GLuint; N]>>(&names);
         assert!(
             !names.assume_init().into_iter().any(|name| name == 0),
             "gl returned a zeroed texture name, UB abounds."
@@ -213,4 +224,4 @@ unsafe fn gl_delete_with<const N: usize, T: ThinGLObject>(
     gl_delete(N as _, names.as_mut_ptr().cast());
 }
 
-type NotSync = std::marker::PhantomData<std::cell::Cell<()>>;
+type NotSync = core::marker::PhantomData<core::cell::Cell<()>>;

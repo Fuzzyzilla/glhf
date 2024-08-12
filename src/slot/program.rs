@@ -8,28 +8,29 @@ use crate::{
     slot::marker::{IsDefault, NotDefault, Unknown},
     NotSync, ThinGLObject,
 };
+#[cfg(feature = "alloc")]
 unsafe fn info_log(
     name: GLuint,
     get_iv: unsafe fn(GLuint, GLenum, *mut GLint),
     fetch_log: unsafe fn(GLuint, GLsizei, *mut GLsizei, *mut GLchar),
-) -> std::ffi::CString {
+) -> alloc::ffi::CString {
     // Fetch the length of buffer to allocate.
     let mut length = 0;
-    get_iv(name, gl::INFO_LOG_LENGTH, std::ptr::addr_of_mut!(length));
+    get_iv(name, gl::INFO_LOG_LENGTH, core::ptr::addr_of_mut!(length));
 
     // Exit early if zero length. Otherwise, assert fails below.
     if length == 0 {
-        return std::ffi::CString::default();
+        return alloc::ffi::CString::default();
     }
 
     // Allocate and populate.
-    let mut string_bytes = Vec::<u8>::with_capacity(length.try_into().unwrap());
+    let mut string_bytes = alloc::vec::Vec::<u8>::with_capacity(length.try_into().unwrap());
     fetch_log(
         name,
         // In param for max length
         string_bytes.capacity().try_into().unwrap(),
         // Out param for actual length
-        std::ptr::addr_of_mut!(length),
+        core::ptr::addr_of_mut!(length),
         // GL uses i8 char, we want u8. This is totally fine.
         string_bytes.as_mut_ptr().cast(),
     );
@@ -38,27 +39,33 @@ unsafe fn info_log(
     string_bytes.set_len(actual_length);
 
     // Expect nul-terminated string from vec.
-    std::ffi::CString::from_vec_with_nul(string_bytes).unwrap()
+    alloc::ffi::CString::from_vec_with_nul(string_bytes).unwrap()
 }
-unsafe fn shader_log(shader: GLuint) -> std::ffi::CString {
+#[cfg(feature = "alloc")]
+unsafe fn shader_log(shader: GLuint) -> alloc::ffi::CString {
     info_log(shader, gl::GetShaderiv, gl::GetShaderInfoLog)
 }
-unsafe fn program_log(program: GLuint) -> std::ffi::CString {
+#[cfg(feature = "alloc")]
+unsafe fn program_log(program: GLuint) -> alloc::ffi::CString {
     info_log(program, gl::GetProgramiv, gl::GetProgramInfoLog)
 }
 
 #[derive(Debug)]
 #[must_use = "dropping a gl handle leaks resources"]
+/// If the feature `alloc` is enabled, includes the GL-provided error log.
 pub struct CompileError<Ty: Type> {
     pub shader: EmptyShader<Ty>,
-    pub error: std::ffi::CString,
+    #[cfg(feature = "alloc")]
+    pub error: alloc::ffi::CString,
 }
 
 #[derive(Debug)]
 #[must_use = "dropping a gl handle leaks resources"]
+/// If the feature `alloc` is enabled, includes the GL-provided error log.
 pub struct LinkError {
     pub program: Program,
-    pub error: std::ffi::CString,
+    #[cfg(feature = "alloc")]
+    pub error: alloc::ffi::CString,
 }
 
 impl Active<NotDefault> {
@@ -263,7 +270,7 @@ impl Active<NotDefault> {
 }
 
 /// Entry points for working with `glUse`d programs.
-pub struct Active<Kind>(std::marker::PhantomData<Kind>);
+pub struct Active<Kind>(core::marker::PhantomData<Kind>);
 pub struct Slot(pub(crate) NotSync);
 impl Slot {
     /// `glUse` a linked program.
@@ -303,7 +310,7 @@ impl Slot {
             gl::GetShaderiv(
                 shader.name().get(),
                 gl::COMPILE_STATUS,
-                std::ptr::addr_of_mut!(was_successful),
+                core::ptr::addr_of_mut!(was_successful),
             );
             was_successful == gl::TRUE.into()
         };
@@ -312,10 +319,17 @@ impl Slot {
             // Safety: we just checked, silly goose!
             Ok(unsafe { shader.into_compiled_unchecked() })
         } else {
-            Err(CompileError {
-                error: unsafe { shader_log(shader.name().get()) },
-                shader,
-            })
+            #[cfg(feature = "alloc")]
+            {
+                Err(CompileError {
+                    error: unsafe { shader_log(shader.name().get()) },
+                    shader,
+                })
+            }
+            #[cfg(not(feature = "alloc"))]
+            {
+                Err(CompileError { shader })
+            }
         }
     }
     /// Link together several compiled shaders into a [`LinkedProgram`]
@@ -338,7 +352,7 @@ impl Slot {
             gl::GetProgramiv(
                 program.name().get(),
                 gl::LINK_STATUS,
-                std::ptr::addr_of_mut!(was_successful),
+                core::ptr::addr_of_mut!(was_successful),
             );
 
             gl::DetachShader(program.name().get(), vertex.name().get());
@@ -351,10 +365,17 @@ impl Slot {
             // Safety: we just checked, knucklehead!
             Ok(unsafe { program.into_linked_unchecked() })
         } else {
-            Err(LinkError {
-                error: unsafe { program_log(program.name().get()) },
-                program,
-            })
+            #[cfg(feature = "alloc")]
+            {
+                Err(LinkError {
+                    error: unsafe { program_log(program.name().get()) },
+                    program,
+                })
+            }
+            #[cfg(not(feature = "alloc"))]
+            {
+                Err(LinkError { program })
+            }
         }
     }
     /// Inherit the currently bound program - this may be no program at all.

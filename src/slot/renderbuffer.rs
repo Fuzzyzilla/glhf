@@ -1,4 +1,4 @@
-use std::num::NonZero;
+use core::num::NonZero;
 
 use crate::{
     gl,
@@ -7,7 +7,7 @@ use crate::{
     GLEnum, NotSync, ThinGLObject,
 };
 
-pub struct Active<Kind>(std::marker::PhantomData<Kind>);
+pub struct Active<Kind>(core::marker::PhantomData<Kind>);
 
 impl Active<NotDefault> {
     /// Define the format and size of a renderbuffer.

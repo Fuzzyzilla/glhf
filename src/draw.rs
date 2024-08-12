@@ -45,9 +45,9 @@ impl ElementType {
     #[must_use]
     pub fn size_of(&self) -> usize {
         match self {
-            Self::U8 => std::mem::size_of::<u8>(),
-            Self::U16 => std::mem::size_of::<u16>(),
-            Self::U32 => std::mem::size_of::<u32>(),
+            Self::U8 => core::mem::size_of::<u8>(),
+            Self::U16 => core::mem::size_of::<u16>(),
+            Self::U32 => core::mem::size_of::<u32>(),
         }
     }
 }
@@ -89,7 +89,7 @@ impl Draw {
     pub unsafe fn arrays<Default: marker::Defaultness>(
         &self,
         mode: Topology,
-        vertices: std::ops::Range<usize>,
+        vertices: core::ops::Range<usize>,
         instances: usize,
         _state: ArrayState<Default>,
     ) {
@@ -137,7 +137,7 @@ impl Draw {
         &self,
         mode: Topology,
         element_type: ElementType,
-        elements: std::ops::Range<usize>,
+        elements: core::ops::Range<usize>,
         instances: usize,
         state: ElementState<Default>,
     ) {
@@ -207,8 +207,8 @@ impl Draw {
         &self,
         mode: Topology,
         element_type: ElementType,
-        elements: std::ops::Range<usize>,
-        index_range: std::ops::RangeInclusive<usize>,
+        elements: core::ops::Range<usize>,
+        index_range: core::ops::RangeInclusive<usize>,
         state: ElementState<Default>,
     ) {
         if elements.start == elements.end {

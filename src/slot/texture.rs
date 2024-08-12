@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Entry points for `glTex*`
-pub struct Active<Dim: Dimensionality>(std::marker::PhantomData<Dim>);
+pub struct Active<Dim: Dimensionality>(core::marker::PhantomData<Dim>);
 
 impl<Dim: Dimensionality> Active<Dim> {
     unsafe fn tex_parameter_enum(pname: GLenum, param: GLenum) {
@@ -104,19 +104,19 @@ impl<Dim: Dimensionality> Active<Dim> {
     #[doc(alias = "glTexParameteri")]
     #[doc(alias = "TEXTURE_BASE_LEVEL")]
     #[doc(alias = "TEXTURE_MAX_LEVEL")]
-    pub fn level_range(&mut self, range: impl std::ops::RangeBounds<u32>) -> &mut Self {
+    pub fn level_range(&mut self, range: impl core::ops::RangeBounds<u32>) -> &mut Self {
         // Min, inclusive.
         let min = match range.start_bound() {
-            std::ops::Bound::Unbounded => 0,
-            std::ops::Bound::Excluded(&n) => n.saturating_add(1),
-            std::ops::Bound::Included(&n) => n,
+            core::ops::Bound::Unbounded => 0,
+            core::ops::Bound::Excluded(&n) => n.saturating_add(1),
+            core::ops::Bound::Included(&n) => n,
         };
         // Max, *also* inclusive!
         let max = match range.end_bound() {
             // This is the GL default *very big* mip number, lol
-            std::ops::Bound::Unbounded => 1000,
-            std::ops::Bound::Excluded(&n) => n.saturating_add(1),
-            std::ops::Bound::Included(&n) => n,
+            core::ops::Bound::Unbounded => 1000,
+            core::ops::Bound::Excluded(&n) => n.saturating_add(1),
+            core::ops::Bound::Included(&n) => n,
         };
 
         unsafe {
@@ -133,7 +133,7 @@ impl<Dim: Dimensionality> Active<Dim> {
     #[doc(alias = "glTexParameterf")]
     #[doc(alias = "TEXTURE_MIN_LOD")]
     #[doc(alias = "TEXTURE_MAX_LOD")]
-    pub fn lod_range(&mut self, range: std::ops::RangeInclusive<f32>) -> &mut Self {
+    pub fn lod_range(&mut self, range: core::ops::RangeInclusive<f32>) -> &mut Self {
         // would be nice if range was impl RangeBounds, but next_up/down isn't stable yet :V
 
         unsafe {
@@ -176,7 +176,7 @@ impl Active<D2> {
         self
     }
 }
-pub struct Slot<Dim: Dimensionality>(pub(crate) NotSync, pub(crate) std::marker::PhantomData<Dim>);
+pub struct Slot<Dim: Dimensionality>(pub(crate) NotSync, pub(crate) core::marker::PhantomData<Dim>);
 impl<Dim: Dimensionality> Slot<Dim> {
     /// Bind a texture, returning an active token.
     #[doc(alias = "glBindTexture")]
@@ -188,7 +188,7 @@ impl<Dim: Dimensionality> Slot<Dim> {
     #[doc(alias = "glBindTexture")]
     pub fn initialize(&mut self, texture: Stateless) -> (Texture<Dim>, &mut Active<Dim>) {
         // Transition the type to an initialized one
-        let texture = Texture(texture.0, std::marker::PhantomData);
+        let texture = Texture(texture.0, core::marker::PhantomData);
         // bind it!
         let bind = self.bind(&texture);
         (texture, bind)
