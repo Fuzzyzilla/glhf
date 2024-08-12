@@ -2,6 +2,7 @@
 use crate::{
     framebuffer::{Attachment, Buffer, Complete, DefaultBuffer, Incomplete},
     gl,
+    renderbuffer::Renderbuffer,
     slot::marker::{Defaultness, IsDefault, NotDefault, Unknown},
     texture::{Dimensionality, Texture2D},
     GLEnum, GLenum, NotSync, ThinGLObject,
@@ -78,6 +79,9 @@ pub struct Active<Slot, Default: Defaultness, Completeness>(
 );
 
 impl<T: Target> Active<T, NotDefault, Incomplete> {
+    /// Bind a Texture to the given `attachment` point.
+    ///
+    /// Textures may be slower than Renderbuffers, but can be used for anything.
     #[doc(alias = "glFramebufferTexture2D")]
     pub fn texture_2d(
         &mut self,
@@ -90,9 +94,42 @@ impl<T: Target> Active<T, NotDefault, Incomplete> {
                 T::TARGET,
                 attachment.as_gl(),
                 Texture2D::TARGET,
-                texture.name().into(),
+                texture.name().get(),
                 mip_level.try_into().unwrap(),
             );
+        }
+        self
+    }
+    /// Bind a Renderbuffer to the given `attachment` point.
+    ///
+    /// Renderbuffers are generally more efficient than textures, but are mostly opaque to
+    /// the user - the only way to observe their contents is to copy or blit the framebuffer.
+    #[doc(alias = "glFramebufferRenderbuffer")]
+    pub fn renderbuffer(
+        &mut self,
+        renderbuffer: &Renderbuffer,
+        attachment: Attachment,
+    ) -> &mut Self {
+        unsafe {
+            gl::FramebufferRenderbuffer(
+                T::TARGET,
+                attachment.as_gl(),
+                Renderbuffer::TARGET,
+                renderbuffer.name().get(),
+            );
+        }
+        self
+    }
+    /// Unbind the given attachment point of renderbuffers or textures.
+    #[doc(alias = "glFramebufferRenderbuffer")]
+    #[doc(alias = "glFramebufferTexture2D")]
+    pub fn unbind(&mut self, attachment: Attachment) -> &mut Self {
+        unsafe {
+            // This is not documented by either FramebufferTexture2D or FramebufferRenderbuffer,
+            // but both seem to leave the framebuffer in identical states when the "unbind" special
+            // value is used. See:
+            // https://registry.khronos.org/OpenGL-Refpages/es3.0/html/glGetFramebufferAttachmentParameteriv.xhtml
+            gl::FramebufferRenderbuffer(T::TARGET, attachment.as_gl(), Renderbuffer::TARGET, 0);
         }
         self
     }

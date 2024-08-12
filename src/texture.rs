@@ -221,6 +221,7 @@ pub enum Format {
 
     DepthComponent = gl::DEPTH_COMPONENT,
     DepthStencil = gl::DEPTH_STENCIL,
+    Stencil = gl::STENCIL,
 }
 // Safety: is repr(u32) enum.
 unsafe impl crate::GLEnum for Format {}

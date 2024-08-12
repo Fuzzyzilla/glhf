@@ -50,6 +50,7 @@ pub mod framebuffer;
 pub mod hint;
 pub mod new;
 pub mod program;
+pub mod renderbuffer;
 pub mod slot;
 pub mod state;
 pub mod texture;

@@ -418,6 +418,13 @@ impl<Binding: Target> Slot<Binding> {
     pub fn inherit(&self) -> &Active<Binding, Unknown> {
         super::zst_ref()
     }
+    /// Inherit the currently bound buffer - this may be no buffer at all.
+    ///
+    /// Most functionality is limited when the status of the buffer (`Default` or `NotDefault`) is not known.
+    #[must_use]
+    pub fn inherit_mut(&mut self) -> &mut Active<Binding, Unknown> {
+        super::zst_mut()
+    }
 }
 
 pub struct Slots {

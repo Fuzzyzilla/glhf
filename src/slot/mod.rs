@@ -5,6 +5,7 @@ pub mod marker;
 pub mod buffer;
 pub mod framebuffer;
 pub mod program;
+pub mod renderbuffer;
 pub mod texture;
 pub mod vertex_array;
 

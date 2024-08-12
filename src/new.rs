@@ -1,7 +1,7 @@
 //! Rust-flavored allocation functions for GL objects.
 use crate::{
-    buffer, framebuffer, gl, gl_delete_with, gl_gen_with, program, texture, vertex_array,
-    NonZeroName, NotSync,
+    buffer, framebuffer, gl, gl_delete_with, gl_gen_with, program, renderbuffer, texture,
+    vertex_array, NonZeroName, NotSync,
 };
 
 /// Entry points for allocating and deallocating GL objects, wrapping `glGen*`.
@@ -27,8 +27,8 @@ impl New {
     pub fn textures<const N: usize>(&self) -> [texture::Stateless; N] {
         unsafe { gl_gen_with(gl::GenTextures) }
     }
-    /// Delete stateless textures. To delete stateful textures, use the relavent
-    /// [`slot::texture::Slot`](crate::slot::texture::Slot::delete) interface.
+    /// Delete stateless textures. To delete stateful textures, use the
+    /// [relavent `Slot` interface](crate::slot::texture::Slot::delete).
     #[doc(alias = "glDeleteTextures")]
     pub fn delete_textures<const N: usize>(&self, textures: [texture::Stateless; N]) {
         unsafe { gl_delete_with(gl::DeleteTextures, textures) }
@@ -38,7 +38,7 @@ impl New {
     pub fn framebuffers<const N: usize>(&self) -> [framebuffer::Incomplete; N] {
         unsafe { gl_gen_with(gl::GenFramebuffers) }
     }
-    /// Generate a set of new framebuffer objects.
+    /// Generate a set of new vertex array objects.
     #[doc(alias = "glGenVertexArrays")]
     pub fn vertex_arrays<const N: usize>(&self) -> [vertex_array::VertexArray; N] {
         unsafe { gl_gen_with(gl::GenVertexArrays) }
@@ -47,6 +47,11 @@ impl New {
     #[doc(alias = "glGenBuffers")]
     pub fn buffers<const N: usize>(&self) -> [buffer::Buffer; N] {
         unsafe { gl_gen_with(gl::GenBuffers) }
+    }
+    /// Generate a set of renderbuffer objects.
+    #[doc(alias = "glGenRenderbuffers")]
+    pub fn render_buffers<const N: usize>(&self) -> [renderbuffer::Renderbuffer; N] {
+        unsafe { gl_gen_with(gl::GenRenderbuffers) }
     }
     /// Initialize a shader object of the given type.
     /// # Panics
