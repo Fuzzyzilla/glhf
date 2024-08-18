@@ -264,6 +264,14 @@ impl Active<NotDefault> {
                     s.as_ptr().cast(),
                 );
             },
+            Matrix::Mat4x2(s) => unsafe {
+                gl::UniformMatrix4x2fv(
+                    location,
+                    s.len().try_into().unwrap(),
+                    gl::FALSE,
+                    s.as_ptr().cast(),
+                );
+            },
         }
         self
     }

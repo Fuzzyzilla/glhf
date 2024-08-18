@@ -5,9 +5,11 @@ edition = "2021"
 
 [lib]
 
+
 [dependencies]
 bitflags = { version = "2.6.0" }
 bytemuck = { version = "1.16.1", features = ["derive"] }
+mint = {version = "0.5.9", optional = true }
 
 [build-dependencies]
 gl_generator = "0.14.0"
@@ -15,10 +17,15 @@ gl_generator = "0.14.0"
 [features]
 default = ["alloc"]
 alloc = []
+mint = ["dep:mint"]
 
 [dev-dependencies]
 anyhow = "1.0.86"
 glutin = "0.32.0"
 glutin-winit = "0.5.0"
-ultraviolet = { version = "0.9.2", features = ["bytemuck"] }
+ultraviolet = { version = "0.9.2", features = ["bytemuck", "mint"] }
 winit = "0.30.4"
+
+[[example]]
+name = "shadow-map"
+required-features = ["mint"]

@@ -487,22 +487,15 @@ impl Window {
             proj * funnier_rotate * (rotate * translate)
         };
 
-        // Convert ultraviolet matrices into GLHF matrices.
-        let camera_matrix = glhf::program::uniform::Mat4::from(
-            camera_matrix.as_component_array().map(|v| *v.as_array()),
-        );
-        let shadow_matrix = glhf::program::uniform::Mat4::from(
-            shadow_matrix.as_component_array().map(|v| *v.as_array()),
-        );
         Self::err();
 
         // In our main program...
         gl.program
             .bind(&program)
             // Bind the matrices we just calculated!
-            .uniform_matrix(0, &camera_matrix)
+            .uniform_matrix(0, &mint::ColumnMatrix4::from(camera_matrix))
             // Note the location here - matrices take up many uniform slots.
-            .uniform_matrix(4, &shadow_matrix)
+            .uniform_matrix(4, &mint::ColumnMatrix4::from(shadow_matrix))
             // Bind texture unit 0, where we'll put the shadow texture at
             // draw time.
             .uniform(8, &0i32);
@@ -510,7 +503,7 @@ impl Window {
         // The shadow program only needs the sun matrix.
         gl.program
             .bind(&shadow_program)
-            .uniform_matrix(0, &shadow_matrix);
+            .uniform_matrix(0, &mint::ColumnMatrix4::from(shadow_matrix));
 
         // Load a test scene.
         let (vertices, indices) =

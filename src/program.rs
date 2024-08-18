@@ -31,6 +31,13 @@ pub mod uniform {
 
     #[repr(C)]
     pub struct Vec2<T: Value>(pub [T; 2]);
+    #[cfg(feature = "mint")]
+    impl<T: mint::IntoMint<MintType = mint::Vector2<f32>>> From<T> for Vec2<f32> {
+        fn from(value: T) -> Self {
+            let value: mint::Vector2<f32> = value.into();
+            Self([value.x, value.y])
+        }
+    }
     #[repr(C)]
     pub struct Vec3<T: Value>(pub [T; 3]);
     #[repr(C)]
@@ -61,7 +68,37 @@ pub mod uniform {
     matrix!(pub struct Mat3x2(pub [[f32; 2]; 3]));
     matrix!(pub struct Mat3x4(pub [[f32; 4]; 3]));
     matrix!(pub struct Mat4x3(pub [[f32; 3]; 4]));
+    matrix!(pub struct Mat4x2(pub [[f32; 2]; 4]));
 
+    #[cfg(feature = "mint")]
+    #[doc(hidden)]
+    mod mint_matrix_type_derives {
+        macro_rules! mint_matrix_from {
+            {$mint:ty as $glhf_repr:ty} => {
+                impl ::core::convert::From<$mint> for $glhf_repr
+                {
+                    fn from(value: $mint) -> Self {
+                        Self(value.into())
+                    }
+                }
+                impl ::core::convert::From<&$mint> for $glhf_repr
+                {
+                    fn from(value: &$mint) -> Self {
+                        Self::from(*value)
+                    }
+                }
+            }
+        }
+        mint_matrix_from!(mint::ColumnMatrix2<f32> as super::Mat2);
+        mint_matrix_from!(mint::ColumnMatrix2x3<f32> as super::Mat3x2);
+        mint_matrix_from!(mint::ColumnMatrix2x4<f32> as super::Mat4x2);
+        mint_matrix_from!(mint::ColumnMatrix3<f32> as super::Mat3);
+        mint_matrix_from!(mint::ColumnMatrix3x2<f32> as super::Mat2x3);
+        mint_matrix_from!(mint::ColumnMatrix3x4<f32> as super::Mat4x3);
+        mint_matrix_from!(mint::ColumnMatrix4<f32> as super::Mat4);
+        mint_matrix_from!(mint::ColumnMatrix4x2<f32> as super::Mat2x4);
+        mint_matrix_from!(mint::ColumnMatrix4x3<f32> as super::Mat3x4);
+    }
     /// Value for a matrix uniform.
     /// If the uniform is not an array, the slice should have one element.
     pub enum Matrix<'a> {
@@ -73,6 +110,7 @@ pub mod uniform {
         Mat3x2(&'a [Mat3x2]),
         Mat3x4(&'a [Mat3x4]),
         Mat4x3(&'a [Mat4x3]),
+        Mat4x2(&'a [Mat4x2]),
     }
     impl Matrix<'_> {
         #[must_use]
@@ -90,6 +128,7 @@ pub mod uniform {
                 Self::Mat4x3(s) => s.len(),
                 Self::Mat2x4(s) => s.len(),
                 Self::Mat3x4(s) => s.len(),
+                Self::Mat4x2(s) => s.len(),
             }
         }
         /// Get the number of locations consumed by this array.
@@ -104,6 +143,7 @@ pub mod uniform {
                 Self::Mat4x3(_) => 4,
                 Self::Mat2x4(_) => 2,
                 Self::Mat3x4(_) => 3,
+                Self::Mat4x2(_) => 4,
             };
             self.len() * columns
         }
@@ -132,6 +172,46 @@ pub mod uniform {
     matrix_froms!(Mat3x2);
     matrix_froms!(Mat3x4);
     matrix_froms!(Mat4x3);
+    matrix_froms!(Mat4x2);
+
+    #[cfg(feature = "mint")]
+    #[doc(hidden)]
+    mod mint_matrix_enum_derives {
+        /// A deeply unsafe macro. Implements From<mint type> for Matrix by
+        /// transmuting the &<mint type> to &<glhf type>.
+        /// # Safety
+        /// Yeah!
+        macro_rules! mint_matrix_froms {
+            {$mint:ty as $glhf_repr:ty} => {
+                impl<'a> ::core::convert::From<&'a $mint> for super::Matrix<'a> {
+                    fn from(value: &'a $mint) -> Self {
+                        let ptr = (value as *const $mint).cast::<$glhf_repr>();
+                        Self::from(unsafe {&*ptr})
+                    }
+                }
+                impl<'a> ::core::convert::From<&'a [$mint]> for super::Matrix<'a> {
+                    fn from(value: &'a [$mint]) -> Self {
+                        let ptr = (value.as_ptr()).cast::<$glhf_repr>();
+                        let slice = unsafe { ::core::slice::from_raw_parts(ptr, value.len()) };
+                        Self::from(slice)
+                    }
+                }
+            }
+        }
+        // Safety: mint types are all repr(C), and matrix types specifically are equivalent to
+        // `[[T; rows]; columns]`. This is the same repr as ours, but notably the naming scheme
+        // is transposed. For alignment, both mint's and ours are left default, which will inherit
+        // align of T (f32), therefor mint type is always strong enough align for us.
+        mint_matrix_froms!(mint::ColumnMatrix2<f32> as super::Mat2);
+        mint_matrix_froms!(mint::ColumnMatrix2x3<f32> as super::Mat3x2);
+        mint_matrix_froms!(mint::ColumnMatrix2x4<f32> as super::Mat4x2);
+        mint_matrix_froms!(mint::ColumnMatrix3<f32> as super::Mat3);
+        mint_matrix_froms!(mint::ColumnMatrix3x2<f32> as super::Mat2x3);
+        mint_matrix_froms!(mint::ColumnMatrix3x4<f32> as super::Mat4x3);
+        mint_matrix_froms!(mint::ColumnMatrix4<f32> as super::Mat4);
+        mint_matrix_froms!(mint::ColumnMatrix4x2<f32> as super::Mat2x4);
+        mint_matrix_froms!(mint::ColumnMatrix4x3<f32> as super::Mat3x4);
+    }
 
     /// Value for a non-matrix uniform.
     /// If the uniform is not an array, the slice should have one element.

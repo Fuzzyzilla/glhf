@@ -32,6 +32,11 @@
 //! * **`alloc` (default)**
 //! > Enables functions that involve `glGet`ting `CStrings`, such as program linker logs.
 //! > without this feature, the user must manually invoke the relavent GL calls.
+//! * **`mint`**
+//! > Enables easy use of linear algebra crates with program uniforms by implementing
+//! > `From<mint::ColumnMatrix*<f32>> for Matrix`. Note that `mint` uses the transpose of
+//! > the matrix size notation used by GL - a GLSL `mat4x3` is represented in mint by
+//! > `ColumnMatrix3x4`.
 //!
 //! This crate is `no_std` by default.
 

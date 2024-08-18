@@ -393,6 +393,7 @@ dependencies = [
  "gl_generator",
  "glutin",
  "glutin-winit",
+ "mint",
  "ultraviolet",
  "winit",
 ]
@@ -584,6 +585,12 @@ checksum = "fe751422e4a8caa417e13c3ea66452215d7d63e19e604f4980461212f3ae1322"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "mint"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53debba6bda7a793e5f99b8dacf19e626084f525f7829104ba9898f367d85ff"
 
 [[package]]
 name = "ndk"
@@ -1194,6 +1201,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a28554d13eb5daba527cc1b91b6c341372a0ae45ed277ffb2c6fbc04f319d7e"
 dependencies = [
  "bytemuck",
+ "mint",
  "wide",
 ]
 
